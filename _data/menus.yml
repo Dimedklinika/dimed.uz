@@ -1,21 +1,21 @@
 main:
-  - name: "Services"
+  - name: "Xizmatlar"
     url: "/services/"
     weight: 2
-  - name: "Team"
+  - name: "Jamoa"
     url: "/team/"
     weight: 3
-  - name: "About"
+  - name: "Biz haqimizda"
     url: "/about/"
     weight: 4
-  - name: "Contact"
+  - name: "Bogʻlanish"
     url: "/contact/"
     weight: 5
 
 footer:
-  - name: "Home"
+  - name: "Bosh sahifa"
     url: "/"
     weight: 1
-  - name: "Contact"
+  - name: "Bogʻlanish"
     url: "/contact/"
     weight: 2
