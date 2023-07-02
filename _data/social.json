@@ -1,12 +1,17 @@
 [
   {
-    "name": "Github",
-    "link": "https://github.com/zerostaticthemes/jekyll-serif-theme",
-    "image": "images/social/github.svg"
+    "name": "Telegram",
+    "link": "https://t.me/dimedklinika",
+    "image": "images/social/telegram.svg"
   },
   {
-    "name": "Twitter",
-    "link": "https://twitter.com/zerostaticio",
-    "image": "images/social/twitter.svg"
+    "name": "Instagram",
+    "link": "https://instagram.com/dimedklinika",
+    "image": "images/social/instagram.svg"
+  },
+  {
+    "name": "Facebook",
+    "link": "https://www.facebook.com/dimedklinika",
+    "image": "images/social/facebook.svg"
   }
 ]
