@@ -1,13 +1,13 @@
 ---
-title: Jekyll Serif Theme
+title: Dimed - koʻp ixtisosli tibbiy markaz
 layout: home
-description: Jekyll Serif contains content types for a typical business website. The theme is fully responsive, blazing fast and artfully illustrated.
-intro_image: "images/illustrations/pointing.svg"
+description: Dimed - koʻp ixtisosli tibbiy markaz. Chinoz shahri markazida joylashgan oilaviy xususiy klinika.
+intro_image: "images/illustrations/people-and-doctor.svg"
 intro_image_absolute: true
 intro_image_hide_on_mobile: true
 show_call_box: true
 ---
 
-# Serif - A Jekyll Business Theme.
+# Dimed - koʻp ixtisosli tibbiy markaz.
 
-Serif contains content types for a typical business website. The theme is fully responsive, blazing fast and artfully illustrated.
+Zamonaviy diagnostika, davolanish va profilaktika. Yuqori professionalizm bilan gʻamxoʻrlik.
