@@ -2,15 +2,18 @@ main:
   - name: "Xizmatlar"
     url: "/services/"
     weight: 2
+  - name: "Tahlillar"
+    url: "/analysis/"
+    weight: 3
   - name: "Jamoa"
     url: "/team/"
-    weight: 3
+    weight: 4
   - name: "Biz haqimizda"
     url: "/about/"
-    weight: 4
+    weight: 5
   - name: "Bogʻlanish"
     url: "/contact/"
-    weight: 5
+    weight: 6
 
 footer:
   - name: "Bosh sahifa"
