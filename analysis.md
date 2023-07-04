@@ -1,7 +1,6 @@
 ---
 title: Laboratoriya tahlillari
-layout: analysis
+layout: analyses
 description: Laboratoriya tahlillari
 ---
 
-# Laboratoriya tahlillari
