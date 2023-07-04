@@ -5,6 +5,7 @@ description: Bogʻlanish
 ---
 
 Manzil: Chinoz shahri, Navoiy koʻchasi, 18.
+
 Moʻljal: Abdurashid savdo markazi.
 
 ### Ambulator muolajalar ish vaqti
