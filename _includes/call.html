@@ -7,11 +7,14 @@
           </a>
         </div>
     {% endif %}
-    {% if site.data.contact.email %}
-    <div class="call-email"><strong>Email: </strong>
-      <a href="mailto:{{ .site.data.contact.email }}">
-        {{ site.data.contact.email }}
-      </a>
+    {% if site.data.contact.address %}
+    <div class="call-email"><strong>Manzil: </strong>
+      {{ site.data.contact.address }}
+    </div>
+    {% endif %}
+    {% if site.data.contact.near %}
+    <div><strong>Moʻljal: </strong>
+      {{ site.data.contact.near }}
     </div>
     {% endif %}
   </div>
