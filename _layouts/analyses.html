@@ -27,7 +27,15 @@ bodyClass: "page-services"
           <h2 class="service-title">
             <a href="{{ analysis.url | relative_url }}">{{ analysis.title }}</a>
           </h2>
-          <p>{{ analysis.content | markdownify | strip_html | truncate: 100 }}</p>
+            <div class="row">
+              <div class="col-9">
+                <p>{{ analysis.group }}</p>
+                <img src="/images/social/duration.svg" title="Ketadigan vaqt" alt="Vaqt: "> {{ analysis.duration }}
+              </div>
+              <div class="col-3 text-nowrap">
+                {{ analysis.price }} soʻm
+              </div>
+            </div>
         </div>
       </div>
     </div>
