@@ -3,12 +3,11 @@ title: Biz haqimizda
 layout: page
 description: Biz haqimizda
 bodyClass: page-about
-intro_image: images/building.jpg
-intro_image_absolute: false
-intro_image_hide_on_mobile: false
 ---
 
 Zamonaviy diagnostika, davolanish va profilaktika. Yuqori professionalizm bilan gʻamxoʻrlik.
+
+![Dimed klinikasi asosiy binosi](/images/building.jpg)
 
 # Statsionar davolanish, Oʻzingizni uyingizdagidak, xatto yaxshiroq
 
