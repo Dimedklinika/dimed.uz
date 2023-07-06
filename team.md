@@ -1,12 +1,12 @@
 ---
-title: Team
+title: Jamoa
 layout: teams
-description: Team
+description: Jamoa
 permalink: "/team/"
 intro_image_absolute: true
 intro_image_hide_on_mobile: false
 ---
 
-# Meet The Team
+# Jamoa
 
-Our team of qualified accountants and financial consultants can help your business at any stage of it's growth.
+Bu sahifa xali to'liq emas
