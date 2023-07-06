@@ -11,9 +11,12 @@ main:
   - name: "Biz haqimizda"
     url: "/about/"
     weight: 5
+  - name: "Yangiliklar va aksiyalar"
+    url: "/news/"
+    weight: 6
   - name: "Bogʻlanish"
     url: "/contact/"
-    weight: 6
+    weight: 7
 
 footer:
   - name: "Bosh sahifa"
