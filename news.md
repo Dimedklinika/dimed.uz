@@ -1,10 +1,8 @@
 ---
 title: Yangiliklar va aksiyalar
-layout: news
+layout: page
 description: Yangiliklar va aksiyalar
 permalink: "/news/"
-intro_image_absolute: true
-intro_image_hide_on_mobile: false
 ---
 
 Yangilik va aksiyalardan birinchi bohabar boʻlish uchun bizning kanallarimizga obuna boring
