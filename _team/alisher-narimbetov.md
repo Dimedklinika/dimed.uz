@@ -9,4 +9,4 @@ weight: 1
 + 10-yillik tajriba
 
 ## Ish vaqti: 
-Dushanba - Shanba, 08:30 - 16:30
+Dushanba - Shanba, 08:30 - 16:00
