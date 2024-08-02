@@ -6,12 +6,13 @@ description: Bogʻlanish
 
 ### Ambulator muolajalar ish vaqti
 
-Har kuni 8:00 - 21:00
+Har kuni 8:00 - 20:00
 
 ### Laboratoriya ish vaqti
 
-Dushanba - Shanba: 8:00 - 17:00
+Dushanba - Shanba: 8:00 - 16:00
 
 ### Shifokorlar ish vaqti
 
-Dushanba - Shanba: 9:00 - 15:00
+Dushanba - Shanba
+[Ish vaqtini shifokor sahifasida koʻring]({{ teams.url | relative_url }})
