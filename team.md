@@ -8,5 +8,3 @@ intro_image_hide_on_mobile: false
 ---
 
 # Jamoa
-
-Bu sahifa xali to'liq emas
