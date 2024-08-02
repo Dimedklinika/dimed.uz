@@ -15,4 +15,4 @@ Dushanba - Shanba: 8:00 - 16:00
 ### Shifokorlar ish vaqti
 
 Dushanba - Shanba
-[Ish vaqtini shifokor sahifasida koʻring]({{team.url}})
+[Ish vaqtini shifokor sahifasida koʻring]({{% link team/index.html %})
