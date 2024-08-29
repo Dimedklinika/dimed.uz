@@ -33,7 +33,8 @@ bodyClass: "page-services"
                 <img class="icon" src="/images/duration.svg" title="Ketadigan vaqt" alt="Vaqt: "> {{ analysis.duration }}
               </div>
               <div class="col-3 text-nowrap">
-                {{ (site.data.price | find:"code",analysis.code)["price"] }} soʻm
+                {% assign price_data = site.data.price | find:"code", analysis.code %}
+                {{ price_data.price }} soʻm
               </div>
             </div>
         </div>
