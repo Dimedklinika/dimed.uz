@@ -1,6 +1,7 @@
 ---
 title: "Rahimov Umidjon Abdujalilovich"
 jobtitle: "Pediatr"
+image: "images/team/rahimov-umid-min.png"
 ---
 
 ## Oliy toifali Pediatr, Bolalar shifokori

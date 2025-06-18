@@ -1,6 +1,7 @@
 ---
 title: "Narimbetov Alisher Serikbayevich"
 date: 2018-12-20T13:44:55+10:00
+image: "images/team/narimbetov-alisher-min.png"
 jobtitle: "Pediatr"
 weight: 1
 ---

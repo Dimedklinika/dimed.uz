@@ -1,6 +1,7 @@
 ---
 title: "Ashurov Tursunali Aminjonovich"
 jobtitle: "Terapevt, Kardiolog"
+image: "images/team/ashurov-tursunali-min.png"
 ---
 
 ## Oliy toifali terapevt, Kardiolog

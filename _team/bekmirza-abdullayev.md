@@ -1,5 +1,6 @@
 ---
 title: "Abdullayev Bekmirza Abduhalilovich"
+image: "images/team/abdullayev-bekmirza-min.png"
 jobtitle: "Logoped, Fizioterapevt"
 ---
 
