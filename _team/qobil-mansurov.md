@@ -11,4 +11,4 @@ image: "images/team/mansurov-qobil-min.png"
 + Ignaterapiya va elektrli ignarefleksterapiya
 
 ## Ish vaqti: 
-Dushanba - Shanba, 09:00 - 15:00
+Dushanba - Shanba, 09:00 - 13:00
