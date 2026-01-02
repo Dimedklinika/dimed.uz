@@ -8,4 +8,4 @@ jobtitle: "Ginekolog"
 
 ## Ish vaqti: 
 Dushanba - Juma, 09:30 - 16:00\
-Shanba, 09:30 - 15:00 (Oyiga ikki martta, Aniqlashtitish uchun bogʻlaning)
+Shanba, 09:30 - 15:00 (oyiga ikki martta, aniqlashtitish uchun bogʻlaning)
