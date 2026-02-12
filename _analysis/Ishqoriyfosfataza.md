@@ -1,6 +1,6 @@
 ---
-code: 93
-title: Kalsiy
+code: 113
+title: Ishqoriy fosfataza
 group: Biokimyoviy qon tahlillari
 
 ---

@@ -1,6 +1,6 @@
 ---
-code: 93
-title: Kalsiy
+code: 92
+title: Bogʻlangan Bilirubin
 group: Biokimyoviy qon tahlillari
 
 ---

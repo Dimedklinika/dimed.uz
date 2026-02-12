@@ -1,6 +1,6 @@
 ---
 code: 40
-title: Revmoproba Umumiy (C-reaktiv oqsil, Revmatoid faktor, albumin, antistreptolizin-O)
+title: Revmoproba Umumiy 3 ko'rsatkich
 group: Revmoproba
-duration: 30-60 daqiqa
+
 ---
