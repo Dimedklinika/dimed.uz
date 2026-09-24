@@ -1,7 +1,8 @@
 import type { Config, Context } from '@netlify/functions';
-import { ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLES } from './lib/db.ts';
-import { loadResults } from './lib/results.ts';
+import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { db, TABLES, scanAllPages } from './lib/db.ts';
+import { loadResults, loadAdminReferences } from './lib/results.ts';
+import type { ReferenceRow } from './lib/references.ts';
 import { shareUrl } from './result.ts';
 import { appointmentsOnDate } from './lib/appointments.ts';
 import { toTashkent, addDays } from './lib/time.ts';
@@ -80,8 +81,9 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     const fullSweep =
       asked === 'full' || (asked !== 'recent' && Math.floor(toTashkent(now).minutes / 60) === FULL_SWEEP_HOUR);
 
-    const { Items = [] } = await db.send(new ScanCommand({ TableName: TABLES.users }));
-    const all = (Items as UserRow[]).filter((u) => u.phone && u.telegram_id);
+    // Bitta Scan 1 MB da kesiladi — qolgan bemorlar xabarsiz qolardi.
+    const rows = (await scanAllPages({ TableName: TABLES.users })) as UserRow[];
+    const all = rows.filter((u) => u.phone && u.telegram_id);
 
     /*
       Tarixi hali belgilanmagan bemor (birinchi marta ko'rilayotgan)
@@ -93,12 +95,18 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       ? all.filter((u) => !u.results_notified || active.has(u.phone as string))
       : all;
 
+    /*
+      Admin referenslari hamma bemor uchun bir xil — bir marta o'qiladi.
+      Ilgari har bemorda `prices` jadvali qaytadan skanerlanardi.
+    */
+    const references = users.length ? await loadAdminReferences() : [];
+
     let checked = 0;
     let sent = 0;
     for (const user of users) {
       checked++;
       try {
-        sent += await notifyUser(user, request);
+        sent += await notifyUser(user, request, references);
       } catch (err) {
         await logToAdmin(`notify-results/${user.telegram_id}`, err);
       }
@@ -119,9 +127,13 @@ const fmtDate = (iso: string): string => {
   return `${m[3]}.${m[2]}.${m[1]}${m[4] ? ` ${m[4]}:${m[5]}` : ''}`;
 };
 
-async function notifyUser(user: UserRow, request: Request): Promise<number> {
+async function notifyUser(
+  user: UserRow,
+  request: Request,
+  references: readonly ReferenceRow[],
+): Promise<number> {
   const phone = user.phone as string;
-  const groups = await loadResults(phone);
+  const groups = await loadResults(phone, references);
   // Faqat tayyor natijalar: bo'sh (kutilayotgan) hujjat keyin to'lganda xabar oladi.
   const ready = groups.filter((g) => g.status === 'ready');
   const known = new Set(user.results_notified ?? []);

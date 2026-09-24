@@ -65,6 +65,13 @@ Cookie — `HttpOnly`, `SameSite=Lax`, HMAC bilan imzolangan
 "kim kirgan" ni bilish uchun alohida yengil endpoint bor:
 `GET /api/session`.
 
+Qulaylik uchun **«Kodni olish»** bir tugmali oqim (A-auth): sayt
+`auth-start.ts` da nonce ochadi, bemor `t.me/dimedcbot?start=kirish_<nonce>`
+havolasi orqali botga o'tadi, bot telefonni kirish sessiyasiga yozadi va
+kodni yuboradi, sayt esa nonce'ni poll qilib telefonni oldindan to'ldiradi
+va kod maydonini ochadi (`lib/login.ts`). Kod baribir kiritiladi —
+xavfsizlik chegarasi o'sha.
+
 Kodni taxmin qilishga qarshi uch qatlam: bitta kodga urinishlar soni,
 bitta raqamga soatiga so'rovlar, IP bo'yicha cheklov
 (`lib/rate-limit.ts` → `dimed_rate_limits`, TTL bilan o'zi o'chadi).
@@ -100,6 +107,11 @@ Sarlavha (`lib/results.ts` → `titleOf`) tartib bilan:
 bitta ko'rsatkich bo'lsa uning nomi → uchtagacha bo'lsa nomlari →
 biomaterial → umumiy nom.
 
+Nomlar avval `lib/analysis-dict.ts` orqali o'zbekchaga o'giriladi (1C
+ruscha/texnik yuborsa; topilmasa asl nom, I1). 1C me'yoriy oraliq
+bermagan ko'rsatkichga `lib/references.ts` (admin kiritgan) oralig'i
+fallback bo'lib qo'yiladi va holat (me'yor/yuqori/past) hisoblanadi (F4).
+
 ### 3.4. Davomat (sayt ↔ 1C, ikki tomonlama)
 
 ```
@@ -134,6 +146,12 @@ Prefiks `dimed_`, region `us-east-1`. To'liq ta'rif —
 | `prices` | `item_id` | — | sayt |
 | `ratings` | `doctor_id` + `created_at` | — | sayt |
 | `rate_limits` | `bucket` | — (TTL) | sayt |
+| `login_sessions` | `nonce` | — (TTL) | sayt |
+
+`prices` jadvalida ikki xil yozuv: `item_id="analysis#<kod>"` — tahlil
+narxlari; `item_id="reference#<nom>#<jins>"`, `kind="reference"` —
+ko'rsatkichlarning me'yoriy oraliqlari (admin kiritadi, F4). Ommaviy
+`/api/prices` faqat `kind="analysis"` ni beradi.
 
 > **Qoida: har jadvalga faqat bitta tomon yozadi.** Buzilganda ma'lumot
 > jimgina bir-birini bosib ketadi.
@@ -152,8 +170,9 @@ Manzil `/api/<fayl nomi>` (redirect `netlify.toml` da).
 | `slots.ts` | Bir kundagi bo'sh vaqtlar |
 | `prices.ts` | Tahlil va qabul narxlari |
 | `session.ts` | Kim kirgan (header'dagi menyu uchun) |
-| `telegram-webhook.ts` | Botdan keladigan hamma narsa: `/start`, kontakt, tugmalar, izohlar |
+| `telegram-webhook.ts` | Botdan keladigan hamma narsa: `/start` (+ `kirish_<nonce>`), kontakt, tugmalar, izohlar |
 | `auth-verify.ts` | Kirish kodini tekshiradi, sessiya ochadi |
+| `auth-start.ts` | «Kodni olish» deep-link: nonce ochadi, poll qiladi (A-auth) |
 | `logout.ts` | Sessiyani tugatadi |
 | `lc-results.ts` | 1C eski API yo'li (`X-API-Key`) — natija qabul qiladi |
 | `payment-webhook.ts` | Payme Merchant API (JSON-RPC) |
@@ -185,6 +204,7 @@ Manzil `/api/<fayl nomi>` (redirect `netlify.toml` da).
 | `admin-doctors.ts` | Shifokorlar: narx, davomiylik, yosh cheklovi, faollik |
 | `admin-appointments.ts` | Butun klinika navbatlari va davr hisoboti |
 | `admin-prices.ts` | Tahlil narxlari |
+| `admin-references.ts` | Ko'rsatkichlar me'yoriy (referens) oraliqlari (F4) |
 | `admin-ratings.ts` | Bemor baholari, yashirish |
 
 ### Cron (Netlify Scheduled Functions)
@@ -216,6 +236,9 @@ da — alohida ro'yxat yo'q.
 | `appointments.ts` | Navbat turi va holatlari, kun/bemor bo'yicha o'qish |
 | `results.ts` | Ikkala natija jadvalini o'qiydi, me'yor va holatni hisoblaydi |
 | `panels.ts` | Ko'rsatkichlardan tahlil nomini taniydi (CBC, siydik, biokimyo…) |
+| `analysis-dict.ts` | 1C ruscha/texnik tahlil va analit nomlarini o'zbekchaga o'giradi (I1) |
+| `references.ts` | Admin kiritgan me'yoriy oraliqlar (1C bermaganda fallback, F4) |
+| `login.ts` | «Kodni olish» kirish sessiyasi: nonce, poll, `/start` parsing (A-auth) |
 | `analyte-info.ts` | Ko'rsatkichlar uchun qisqa tavsif (ⓘ tugmasi) |
 | `visits.ts` | 1C qabul hujjatlarini navbatlarga bog'laydi (`matchArrivals`) |
 | `patients.ts` | 1C bemor profilini `users` ga birlashtiradi |
@@ -246,6 +269,7 @@ da — alohida ro'yxat yo'q.
 | `/kabinet/admin` | `kabinet/admin/index.astro` | Shifokorlar |
 | `/kabinet/admin/navbatlar` | `.../navbatlar.astro` | Klinika navbatlari, hisobot |
 | `/kabinet/admin/narxlar` | `.../narxlar.astro` | Narxlar |
+| `/kabinet/admin/referenslar` | `.../referenslar.astro` | Referens (me'yoriy) qiymatlar |
 | `/kabinet/admin/baholar` | `.../baholar.astro` | Baholar |
 | `/maxfiylik` | `maxfiylik.astro` | Maxfiylik siyosati |
 | 404 | `404.astro` | Topilmadi sahifasi |
@@ -314,7 +338,8 @@ bo'lmaydi — shuning uchun `DIMED_` prefiksi ishlatiladi
 
 **CSP.** `netlify.toml` da `script-src 'self'` — tashqi skript
 yuklanmaydi. Kutubxona kerak bo'lsa npm orqali qo'shing va dinamik
-`import()` bilan chaqiring (html2pdf shunday qilingan), cdnjs'dan emas.
+`import()` bilan chaqiring (PDF uchun `pdfmake` shunday qilingan —
+`src/lib/result-pdf.ts`, natija A4 vektor blank), cdnjs'dan emas.
 
 **Til.** Kod izohlari va hujjatlar — **o'zbekcha**. Yangi matn
 qo'shsangiz uch tilda: `src/data/i18n.ts` (sayt),

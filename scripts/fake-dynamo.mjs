@@ -3,8 +3,8 @@
  *
  * Haqiqiy AWS'siz API funksiyalarini uchdan-uchgacha sinash imkonini
  * beradi. Faqat loyihada ishlatiladigan amallar qo'llab-quvvatlanadi:
- * PutItem, GetItem, DeleteItem, UpdateItem, Query, Scan va oddiy
- * ConditionExpression'lar.
+ * PutItem, GetItem, DeleteItem, UpdateItem, Query, Scan (ikkalasi
+ * sahifalanadi) va oddiy ConditionExpression'lar.
  */
 import { createServer } from 'node:http';
 
@@ -23,8 +23,12 @@ const keySchema = {
   test_prices: ['item_id'],
   test_ratings: ['doctor_id', 'created_at'],
   test_rate_limits: ['bucket'],
+  test_login_sessions: ['nonce'],
 };
 for (const t of Object.keys(keySchema)) tables.set(t, new Map());
+
+/** `${amal}:${jadval}` → so'rovlar soni (testlar "necha marta o'qildi"ni tekshiradi). */
+const calls = new Map();
 
 const un = (v) => {
   if (v === null || typeof v !== 'object') return v;
@@ -181,6 +185,39 @@ function applyUpdate(item, expr, names, values) {
   return next;
 }
 
+/**
+ * Javobni sahifalaydi: `ExclusiveStartKey` dan keyingisidan boshlab
+ * `Limit` tagacha; qolgani bo'lsa `LastEvaluatedKey` beradi.
+ *
+ * Haqiqiy DynamoDB Query va Scan javobini 1 MB da kesadi, Limit
+ * so'ralmasa ham. Soxta jadval ham shunday qiladi (25 tadan) —
+ * sahifalashni unutgan kod testda ushlanadi, produksiyada emas.
+ */
+function pageOf(table, items, payload) {
+  if (payload.ExclusiveStartKey) {
+    const from = Object.fromEntries(
+      Object.entries(payload.ExclusiveStartKey).map(([k, v]) => [k, un(v)]),
+    );
+    const at = items.findIndex((i) => itemKey(table, i) === itemKey(table, from));
+    items = at === -1 ? [] : items.slice(at + 1);
+  }
+
+  const limit = payload.Limit ?? 25;
+  const page = items.slice(0, limit);
+  const last = items.length > limit ? page[page.length - 1] : undefined;
+
+  return {
+    Items: page.map((i) => Object.fromEntries(Object.entries(i).map(([k, v]) => [k, marshal(v)]))),
+    ...(last
+      ? {
+          LastEvaluatedKey: Object.fromEntries(
+            keySchema[table].map((k) => [k, marshal(last[k])]),
+          ),
+        }
+      : {}),
+  };
+}
+
 const server = createServer((req, res) => {
   let body = '';
   req.on('data', (c) => (body += c));
@@ -189,6 +226,7 @@ const server = createServer((req, res) => {
     const payload = JSON.parse(body || '{}');
     const table = payload.TableName;
     const store = tables.get(table);
+    calls.set(`${target}:${table}`, (calls.get(`${target}:${table}`) ?? 0) + 1);
     const send = (obj, code = 200) => {
       res.writeHead(code, { 'content-type': 'application/x-amz-json-1.0' });
       res.end(JSON.stringify(obj));
@@ -230,20 +268,16 @@ const server = createServer((req, res) => {
       if (!evalCondition(payload.ConditionExpression, existing, names, values)) {
         return fail('ConditionalCheckFailedException');
       }
+      const before = existing ? { ...existing } : undefined;
       const updated = applyUpdate(existing ?? key, payload.UpdateExpression, names, values);
       store.set(id, updated);
-      if (payload.ReturnValues === 'ALL_NEW') {
-        return send({ Attributes: Object.fromEntries(Object.entries(updated).map(([k, v]) => [k, marshal(v)])) });
-      }
+      const asAttrs = (obj) => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, marshal(v)]));
+      if (payload.ReturnValues === 'ALL_NEW') return send({ Attributes: asAttrs(updated) });
+      if (payload.ReturnValues === 'ALL_OLD') return send(before ? { Attributes: asAttrs(before) } : {});
       return send({});
     }
 
-    if (target === 'Scan') {
-      const items = [...store.values()];
-      return send({
-        Items: items.map((i) => Object.fromEntries(Object.entries(i).map(([k, v]) => [k, marshal(v)]))),
-      });
-    }
+    if (target === 'Scan') return send(pageOf(table, [...store.values()], payload));
 
     if (target === 'Query') {
       const cond = payload.KeyConditionExpression;
@@ -287,33 +321,7 @@ const server = createServer((req, res) => {
         if (payload.ScanIndexForward === false) items.reverse();
       }
 
-      if (payload.ExclusiveStartKey) {
-        const from = Object.fromEntries(
-          Object.entries(payload.ExclusiveStartKey).map(([k, v]) => [k, un(v)]),
-        );
-        const at = items.findIndex((i) => itemKey(table, i) === itemKey(table, from));
-        items = at === -1 ? [] : items.slice(at + 1);
-      }
-
-      /*
-        Haqiqiy DynamoDB javobni 1 MB da kesadi, Limit so'ralmasa ham.
-        Soxta jadval ham shunday qiladi — sahifalashni unutgan kod
-        testda ushlanadi, produksiyada emas.
-      */
-      const limit = payload.Limit ?? 25;
-      const page = items.slice(0, limit);
-      const last = items.length > limit ? page[page.length - 1] : undefined;
-
-      return send({
-        Items: page.map((i) => Object.fromEntries(Object.entries(i).map(([k, v]) => [k, marshal(v)]))),
-        ...(last
-          ? {
-              LastEvaluatedKey: Object.fromEntries(
-                keySchema[table].map((k) => [k, marshal(last[k])]),
-              ),
-            }
-          : {}),
-      });
+      return send(pageOf(table, items, payload));
     }
 
     return send({ message: `Qo'llab-quvvatlanmaydi: ${target}` }, 400);
@@ -332,3 +340,6 @@ export const stopFakeDynamo = () => server.close();
 export const seed = (table, key, item) => tables.get(table).set(key, item);
 
 export const tableOf = (table) => tables.get(table);
+
+/** Shu paytgacha amal (`Scan`, `Query`, ...) jadvalga necha marta kelgani. */
+export const callCount = (target, table) => calls.get(`${target}:${table}`) ?? 0;

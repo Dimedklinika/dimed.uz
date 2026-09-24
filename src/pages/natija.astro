@@ -15,7 +15,8 @@ import { site } from '../data/site';
   palitrasi (pushti), shrift — saytniki.
 
   Ma'lumot: GET /api/result?id= (o'z natijasi, sessiya) yoki ?t=
-  (ulashilgan havola). PDF brauzerda yasaladi (html2pdf.js, D2).
+  (ulashilgan havola). PDF brauzerda vektor (matnli) shaklda yasaladi
+  (pdfmake — src/lib/result-pdf.ts, D2).
 */
 ---
 
@@ -106,6 +107,7 @@ import { site } from '../data/site';
   import { getLang, bindLangSwitch } from '../lib/lang';
   import { formatBirthDate, ageOf } from '../lib/birthdate';
   import { resultTitle } from '../lib/result-title';
+  import { downloadResultPdf, fileSlug } from '../lib/result-pdf';
 
   type Status = 'normal' | 'high' | 'low' | null;
   type Item = {
@@ -307,102 +309,26 @@ import { site } from '../data/site';
     setTimeout(() => (toast.hidden = true), 3500);
   };
 
-  /** "Yoʻldoshev Anvar" → "Yoldoshev_Anvar" (fayl nomi uchun). */
-  const fileSlug = (s: string) =>
-    s
-      .replace(/[ʻʼ’'`]/g, '')
-      .replace(/[^\p{L}\p{N}]+/gu, '_')
-      .replace(/^_+|_+$/g, '') || 'bemor';
-
   /*
-    Kutubxona sahifa bilan birga yuklanmaydi: "PDF yuklash" bosilganda
-    alohida bo'lak (chunk) sifatida keladi. Manba — o'z domenimiz, ya'ni
-    `script-src 'self'` bilan ishlaydi. Ilgari u cdnjs'dan olinardi va
-    CSP uni jimgina bloklardi: tugma har safar brauzerning chop etish
-    oynasiga tushib ketardi.
+    PDF endi vektor (matnli): `src/lib/result-pdf.ts` `pdfmake` bilan
+    to'g'ridan-to'g'ri A4 blank quradi. Ekran/mobil layout PDF ichiga
+    kirmaydi, matnlarni belgilash/qidirish mumkin, 24 tagacha ko'rsatkich
+    bitta betga sig'adi. Kutubxona alohida bo'lak (chunk) sifatida o'z
+    domenimizdan yuklanadi — `script-src 'self'` bilan ishlaydi.
   */
-  type Html2Pdf = typeof import('html2pdf.js').default;
-
-  let pdfLib: Promise<Html2Pdf> | null = null;
-  const loadHtml2pdf = (): Promise<Html2Pdf> => {
-    pdfLib ??= import('html2pdf.js').then((m) => m.default);
-    return pdfLib;
-  };
-
-  /**
-   * Sahifani tepaga **darhol** chiqaradi va chiqqanini kutadi.
-   *
-   * `html { scroll-behavior: smooth }` bo'lgani uchun oddiy
-   * `scrollTo(0, 0)` animatsiya qiladi: html2canvas esa animatsiya
-   * tugamasdan surat oladi va qolgan masofa PDF tepasida bo'sh joy
-   * bo'lib qoladi (Safari'da bu ayniqsa sezilardi). Shu safar uchun
-   * silliq surilish o'chiriladi.
-   */
-  function scrollToTop(): Promise<void> {
-    return new Promise((resolve) => {
-      if (window.scrollY === 0) {
-        resolve();
-        return;
-      }
-      const root = document.documentElement;
-      const previous = root.style.scrollBehavior;
-      root.style.scrollBehavior = 'auto';
-      window.scrollTo(0, 0);
-      requestAnimationFrame(() => {
-        root.style.scrollBehavior = previous;
-        resolve();
-      });
-    });
-  }
-
   el('btnPdf').addEventListener('click', async () => {
     if (!result) return;
     const btn = el<HTMLButtonElement>('btnPdf');
-    const report = el('report');
     const filename = `Dimed_${fileSlug(result.patientName ?? 'bemor')}_${result.date.slice(0, 10) || 'natija'}.pdf`;
 
     btn.disabled = true;
-    report.classList.add('pdf-mode');
-
-    /*
-      html2canvas sahifani ekran koordinatalarida oladi: bemor
-      ko'rsatkichlarni ko'rish uchun pastga tushib tugmani bossa,
-      surilgan masofa PDF tepasida bo'sh joy bo'lib qolardi (shikoyatda
-      "deyarli ikki bet"). Shuning uchun avval tepaga chiqamiz va
-      sanoq nuqtasini html2canvas'ga aniq ko'rsatamiz.
-    */
-    const scrollY = window.scrollY;
-    await scrollToTop();
-
     try {
-      const html2pdf = await loadHtml2pdf();
-      await html2pdf()
-        .set({
-          margin: [8, 8, 10, 8],
-          filename,
-          image: { type: 'jpeg', quality: 0.96 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            backgroundColor: '#ffffff',
-            /* Tepaga chiqqan bo'lsak nol; chiqmay qolsa ham surilish
-               shu yerda qoplanadi — Safari uchun tavsiya etilgan yo'l. */
-            scrollX: 0,
-            scrollY: -window.scrollY,
-            windowWidth: document.documentElement.offsetWidth,
-            windowHeight: document.documentElement.offsetHeight,
-          },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-          pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.patient-table', '.banner'] },
-        })
-        .from(report)
-        .save();
+      await downloadResultPdf(result, lang, filename);
     } catch {
-      // Kutubxona yuklanmasa — brauzerning "PDF sifatida saqlash" oynasi.
+      // Kutubxona yuklanmasa — brauzerning "PDF sifatida saqlash" oynasi
+      // (chop etish uslubi ham A4 blank beradi).
       window.print();
     } finally {
-      report.classList.remove('pdf-mode');
-      window.scrollTo(0, scrollY);
       btn.disabled = false;
     }
   });

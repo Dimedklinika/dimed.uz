@@ -1,6 +1,7 @@
 import type { Context } from '@netlify/functions';
 import { timingSafeEqual } from 'node:crypto';
-import { GetCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { db, TABLES } from './lib/db.ts';
 import { createSessionCookie } from './lib/session.ts';
 import { mergeIndividualProfile } from './lib/patients.ts';
@@ -13,29 +14,50 @@ type Body = { phone?: string; code?: string };
 
 /*
   Kod 6 xonali — taxmin qilish mumkin. Shuning uchun uch qatlam:
-    1) bitta kodga nechta noto'g'ri urinish (shu yerda, kod yozuvida);
+    1) bitta kodga nechta urinish (shu yerda, kod yozuvida);
     2) bitta raqamga soatiga nechta urinish;
     3) bitta IP dan soatiga nechta urinish (bir nechta raqamni
        ketma-ket sinab ko'rishga qarshi).
-  Birinchisi eng muhimi va u qo'shimcha jadvalsiz ishlaydi.
+  Birinchisi eng muhimi va u qo'shimcha jadvalsiz ishlaydi — cheklov
+  jadvali ishlamay qolsa ham (rate-limit ochiq yiqiladi).
 */
 const MAX_CODE_ATTEMPTS = 5;
 const MAX_PER_PHONE = 10;
 const MAX_PER_IP = 30;
 const WINDOW_SECONDS = 60 * 60;
 
-/** Noto'g'ri urinishni sanaydi va yangi qiymatini qaytaradi. */
-async function countAttempt(phone: string): Promise<number> {
-  const res = await db.send(
-    new UpdateCommand({
-      TableName: TABLES.otpCodes,
-      Key: { phone },
-      UpdateExpression: 'SET attempts = if_not_exists(attempts, :zero) + :one',
-      ExpressionAttributeValues: { ':zero': 0, ':one': 1 },
-      ReturnValues: 'ALL_NEW',
-    }),
-  );
-  return Number((res.Attributes as { attempts?: number } | undefined)?.attempts ?? 1);
+type OtpRecord = { code: string; telegram_id: string; expires_at: number; attempts?: number };
+
+/**
+ * Urinishni kod taqqoslanishidan OLDIN band qiladi va kod yozuvini
+ * qaytaradi; urinishlar tugagan yoki kod yo'q bo'lsa — null.
+ *
+ * Avval kod o'qilib, urinish taqqoslashdan keyin sanalardi: bir vaqtda
+ * kelgan so'rovlarning hammasi eski hisobni ko'rib, har biri o'z
+ * taxminini tekshirtirardi — "bitta kodga 5 urinish" parallel
+ * so'rovlarda ishlamasdi. Endi shart bilan oshiriladi: har taxmin
+ * tekshirilishidan oldin bittadan urinish yeydi.
+ */
+async function reserveAttempt(phone: string): Promise<OtpRecord | null> {
+  try {
+    const res = await db.send(
+      new UpdateCommand({
+        TableName: TABLES.otpCodes,
+        Key: { phone },
+        UpdateExpression: 'SET attempts = if_not_exists(attempts, :zero) + :one',
+        // attribute_exists(code): kod yo'q bo'lsa kodsiz yozuv yaratilmasin.
+        ConditionExpression:
+          '(attribute_exists(code) AND attribute_not_exists(attempts)) OR ' +
+          '(attribute_exists(code) AND attempts < :max)',
+        ExpressionAttributeValues: { ':zero': 0, ':one': 1, ':max': MAX_CODE_ATTEMPTS },
+        ReturnValues: 'ALL_NEW',
+      }),
+    );
+    return res.Attributes as OtpRecord;
+  } catch (err) {
+    if (err instanceof ConditionalCheckFailedException) return null;
+    throw err;
+  }
 }
 
 export default async (request: Request, _context: Context): Promise<Response> => {
@@ -59,10 +81,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     const given = body.code.replace(/\D/g, '');
     if (given.length !== 6) return error('Kod 6 xonali bo‘lishi kerak');
 
-    const found = await db.send(new GetCommand({ TableName: TABLES.otpCodes, Key: { phone } }));
-    const record = found.Item as
-      | { code: string; telegram_id: string; expires_at: number }
-      | undefined;
+    const record = await reserveAttempt(phone);
 
     // TTL o'chirishi kechikishi mumkin — muddatni o'zimiz ham tekshiramiz.
     if (!record || record.expires_at < Math.floor(Date.now() / 1000)) {
@@ -73,11 +92,11 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     const b = Buffer.from(given);
     if (a.length !== b.length || !timingSafeEqual(a, b)) {
       /*
-        Noto'g'ri urinishni sanaymiz va chegaraga yetganda kodni
-        kuydiramiz: shundan keyin botdan yangi kod olish kerak, ya'ni
-        taxmin qilish uchun bemorning o'z Telegramiga kirish shart.
+        Chegaraga yetganda kodni kuydiramiz: shundan keyin botdan yangi
+        kod olish kerak, ya'ni taxmin qilish uchun bemorning o'z
+        Telegramiga kirish shart.
       */
-      const used = await countAttempt(phone);
+      const used = Number(record.attempts ?? 1);
       if (used >= MAX_CODE_ATTEMPTS) {
         await db.send(new DeleteCommand({ TableName: TABLES.otpCodes, Key: { phone } }));
         return error('Juda ko‘p noto‘g‘ri urinish. Botdan yangi kod oling.', 401);

@@ -142,6 +142,16 @@ export const tables = [
     ttlAttribute: 'expires_at',
   },
   {
+    // Kirish sessiyasi (A-auth): saytda "Kodni olish" bosilganda nonce
+    // ochiladi, bot /start kirish_<nonce> ni ko'rib telefonni yozadi,
+    // sayt esa poll qilib kod kiritish maydonini avtomatik ochadi.
+    // Vaqtinchalik — TTL bilan o'zi o'chadi (bemor ma'lumoti saqlanmaydi).
+    name: 'login_sessions',
+    attrs: [S('nonce')],
+    keys: [HASH('nonce')],
+    ttlAttribute: 'expires_at',
+  },
+  {
     // Bemor baholari (G2/F3): PK shifokor, SK baho qo'yilgan lahza (ISO).
     // O'rtacha baho va soni doctors jadvalida (rating_sum, rating_count)
     // yig'ilib turadi — sayt kartasi shu yerdan o'qiydi.

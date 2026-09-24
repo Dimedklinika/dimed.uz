@@ -14,6 +14,8 @@ const load = (file) => import(pathToFileURL(join(libDir, file)).href);
 const { createSessionCookie, readSession, generateOtp } = await load('session.ts');
 const { normalizePhone } = await load('http.ts');
 const { tableName, awsCredentials } = await load('env.ts');
+const { escapeHtml } = await load('telegram.ts');
+const { botText } = await load('i18n.ts');
 
 let passed = 0;
 const test = (name, fn) => {
@@ -96,6 +98,28 @@ test('takrorlanmaydi (2000 tadan kamida 1900 xil)', () => {
 
 console.log('Jadval nomlari:');
 test('prefiks qo\'shiladi', () => assert.equal(tableName('users'), 'dimed_users'));
+
+console.log('\nTelegram HTML:');
+test('escapeHtml faqat &, < va > ni almashtiradi', () => {
+  assert.equal(escapeHtml('a < b && c > d'), 'a &lt; b &amp;&amp; c &gt; d');
+  assert.equal(escapeHtml('Yo‘ldosheva "Nilufar"'), 'Yo‘ldosheva "Nilufar"');
+});
+
+test('botText qiymatlarni ekranlaydi, shablon teglari saqlanadi', () => {
+  // Tahlil nomidagi `<`/`&` Telegram'da butun xabarni rad ettirardi.
+  const text = botText('result.ready', 'uz', {
+    title: 'Ca & Mg <qon>',
+    date: '01.02.2026',
+    link: 'https://dimed.uz/natija?t=a.b',
+  });
+  assert.ok(text.includes('Ca &amp; Mg &lt;qon&gt;'), text);
+  assert.ok(text.startsWith('🧪 <b>'), 'shablondagi <b> tegi o\'zgarmasligi kerak');
+  assert.ok(text.includes('https://dimed.uz/natija?t=a.b'));
+});
+
+test('botText berilmagan qiymat joyini o\'zgarishsiz qoldiradi', () => {
+  assert.ok(botText('rate.thanks', 'uz', {}).includes('{stars}'));
+});
 
 console.log('\nAWS kalitlari:');
 /*

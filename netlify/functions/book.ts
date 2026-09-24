@@ -10,7 +10,7 @@ import { isDateKey, isTime, toInstant, weekdayOf, type DateKey } from './lib/tim
 import { createPayment } from './lib/payment.ts';
 import { listPatients } from './lib/patients.ts';
 import { ageOn, fitsAgeGroup, toAgeGroup, ageRejected } from './lib/age.ts';
-import { sendMessage, logToAdmin } from './lib/telegram.ts';
+import { sendMessage, logToAdmin, escapeHtml } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 import { hitLimit, tooMany } from './lib/rate-limit.ts';
 
@@ -250,8 +250,8 @@ async function confirmAtClinic(
     await sendMessage(
       telegramId,
       `✅ <b>Navbatingiz band qilindi</b>\n\n` +
-        (patientName ? `Bemor: ${patientName}\n` : '') +
-        `Shifokor: ${doctorName}\n` +
+        (patientName ? `Bemor: ${escapeHtml(patientName)}\n` : '') +
+        `Shifokor: ${escapeHtml(doctorName)}\n` +
         `Sana: ${date}, soat ${time}\n` +
         `Narx: ${price.toLocaleString('ru-RU')} so'm\n\n` +
         `Qabulxona kassasiga ${price.toLocaleString('ru-RU')} so'm to'laysiz. Iltimos, 10 daqiqa oldin keling.\n` +

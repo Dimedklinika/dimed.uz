@@ -7,7 +7,7 @@ import { doctorDayKey, isValidSlot, isBookable } from './lib/slots.ts';
 import { shiftsFor } from './lib/schedule.ts';
 import { isConfirmed, type Appointment } from './lib/appointments.ts';
 import { isDateKey, isTime, toInstant, weekdayOf } from './lib/time.ts';
-import { sendMessage, logToAdmin } from './lib/telegram.ts';
+import { sendMessage, logToAdmin, escapeHtml } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 import { hitLimit, tooMany } from './lib/rate-limit.ts';
 
@@ -207,7 +207,7 @@ async function notifyPatient(
     await sendMessage(
       telegramId,
       `🔄 <b>Navbat vaqti o'zgartirildi</b>\n\n` +
-        `Shifokor: ${doctorName}\n` +
+        `Shifokor: ${escapeHtml(doctorName)}\n` +
         `Eski vaqt: ${moved.date}, soat ${moved.time}\n` +
         `Yangi vaqt: <b>${moved.toDate}, soat ${moved.toTime}</b>\n\n` +
         `Iltimos, 10 daqiqa oldin keling.`,

@@ -6,7 +6,7 @@ import { sessionFrom, doctorFor } from './lib/auth.ts';
 import { doctorDayKey } from './lib/slots.ts';
 import { dayAppointments, holdsSlot, type Appointment } from './lib/appointments.ts';
 import { isDateKey, toTashkent, addDays } from './lib/time.ts';
-import { sendMessage, logToAdmin } from './lib/telegram.ts';
+import { sendMessage, logToAdmin, escapeHtml } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 
 const DEFAULT_REASON = 'Shifokor ishga chiqa olmadi';
@@ -125,9 +125,9 @@ async function tellPatient(
     await sendMessage(
       appointment.telegram_id,
       `⚠️ <b>Qabul bekor qilindi</b>\n\n` +
-        `Shifokor: ${doctorName}\n` +
+        `Shifokor: ${escapeHtml(doctorName)}\n` +
         `Sana: ${date}, soat ${appointment.time}\n` +
-        `Sabab: ${reason}\n\n` +
+        `Sabab: ${escapeHtml(reason)}\n\n` +
         `Uzr so'raymiz. Boshqa vaqtga yozilish uchun saytdagi shaxsiy ` +
         `kabinetingizga kiring — to'lov qilingan bo'lsa u saqlanadi.`,
     );

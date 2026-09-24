@@ -1,0 +1,485 @@
+---
+import Cabinet from '../../../layouts/Cabinet.astro';
+import SignInCard from '../../../components/SignInCard.astro';
+import { t } from '../../../data/i18n';
+
+/*
+  Admin — Ko'rsatkichlar me'yoriy (referens) oraliqlari (F4). 1C oraliq
+  bermagan analitlarga shu qiymatlar qo'yiladi va sayt me'yor/yuqori/past
+  deb baholaydi. 1C oralig'i bo'lsa u har doim ustun (lib/results.ts).
+  Ma'lumot: /api/admin-references (GET/POST/DELETE).
+*/
+---
+
+<Cabinet
+  title="Referens qiymatlar — Admin"
+  description="Ko'rsatkichlarning me'yoriy oraliqlarini kiritish (1C bermaganda ishlatiladi)."
+  eyebrow="Administrator"
+  heading="Referens qiymatlar"
+  area="admin"
+  active="referenslar"
+>
+  <span class="sub" id="subtitle" slot="sub"></span>
+
+  <div id="loading" class="state">Yuklanmoqda…</div>
+
+  <SignInCard what={t('signin.what.admin')} next="/kabinet/admin/referenslar" id="denied" hidden />
+
+  <div id="content" hidden>
+    <div class="card glass">
+      <div class="card-head">
+        <h2>Yangi referens qo‘shish</h2>
+        <span class="hint">
+          1C tahlil oralig‘ini bermasa, sayt shu qiymat bilan me‘yor/yuqori/past deb baholaydi.
+          Birlik kiritilsa, boshqa birlikda kelgan natijaga (masalan g/L o‘rniga g/dL) qo‘llanmaydi.
+        </span>
+      </div>
+      <form class="add-form" id="addForm">
+        <label class="fld big">
+          <span>Ko‘rsatkich nomi</span>
+          <input id="fName" type="text" placeholder="Gemoglobin" required />
+        </label>
+        <label class="fld">
+          <span>Jins</span>
+          <select id="fGender">
+            <option value="all">Hamma</option>
+            <option value="male">Erkak</option>
+            <option value="female">Ayol</option>
+          </select>
+        </label>
+        <label class="fld">
+          <span>Pastki</span>
+          <input id="fLow" type="number" step="any" inputmode="decimal" placeholder="120" />
+        </label>
+        <label class="fld">
+          <span>Yuqori</span>
+          <input id="fHigh" type="number" step="any" inputmode="decimal" placeholder="160" />
+        </label>
+        <label class="fld">
+          <span>Birlik</span>
+          <input id="fUnit" type="text" placeholder="g/L" />
+        </label>
+        <button class="btn btn-sm" id="addBtn" type="submit">Qo‘shish</button>
+      </form>
+      <p class="form-msg" id="addMsg" role="status" aria-live="polite"></p>
+    </div>
+
+    <div class="card glass">
+      <div class="card-head">
+        <h2>Kiritilgan referenslar</h2>
+        <span class="hint">Bittasini o‘zgartirib «Saqlash», yoki «O‘chirish».</span>
+      </div>
+      <p class="empty" id="empty" hidden>Hali referens kiritilmagan.</p>
+      <div class="rows" id="refRows"></div>
+    </div>
+  </div>
+</Cabinet>
+
+<script>
+  import { getLang } from '../../../lib/lang';
+  import { t } from '../../../data/i18n';
+  import { showSignIn } from '../../../lib/signin';
+
+  type Gender = 'all' | 'male' | 'female';
+  type Reference = { id: string; name: string; low: number | null; high: number | null; unit: string; gender: Gender };
+
+  const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) =>
+    s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+  const genderLabel: Record<Gender, string> = { all: 'Hamma', male: 'Erkak', female: 'Ayol' };
+
+  let refs: Reference[] = [];
+
+  const send = (method: string, body: unknown) =>
+    fetch('/api/admin-references', {
+      method,
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  const setRowMsg = (row: HTMLElement, text: string, kind: 'ok' | 'error' | '') => {
+    const m = row.querySelector<HTMLElement>('.row-msg');
+    if (!m) return;
+    m.textContent = text;
+    m.className = `row-msg${kind ? ` ${kind}` : ''}`;
+  };
+
+  const numOrNull = (v: string): number | null => {
+    const s = v.trim().replace(',', '.');
+    return s === '' ? null : Number(s);
+  };
+
+  function render() {
+    el('empty').hidden = refs.length > 0;
+    el('refRows').innerHTML = refs
+      .map(
+        (r) => `<div class="row" data-id="${esc(r.id)}">
+          <div class="row-main">
+            <b>${esc(r.name)}</b>
+            <small>${genderLabel[r.gender]}</small>
+          </div>
+          <label class="num-fld"><span>Pastki</span><input type="number" step="any" class="low" value="${r.low ?? ''}" /></label>
+          <label class="num-fld"><span>Yuqori</span><input type="number" step="any" class="high" value="${r.high ?? ''}" /></label>
+          <label class="num-fld unit"><span>Birlik</span><input type="text" class="unit" value="${esc(r.unit)}" /></label>
+          <button class="mini" data-save type="button">Saqlash</button>
+          <button class="mini danger" data-del type="button">O‘chirish</button>
+          <span class="row-msg"></span>
+        </div>`,
+      )
+      .join('');
+
+    el('refRows')
+      .querySelectorAll<HTMLButtonElement>('[data-save]')
+      .forEach((btn) => btn.addEventListener('click', () => saveRow(btn)));
+    el('refRows')
+      .querySelectorAll<HTMLButtonElement>('[data-del]')
+      .forEach((btn) => btn.addEventListener('click', () => delRow(btn)));
+
+    el('subtitle').textContent = `${refs.length} ta referens`;
+  }
+
+  async function saveRow(btn: HTMLButtonElement) {
+    const row = btn.closest<HTMLElement>('.row')!;
+    const r = refs.find((x) => x.id === row.dataset.id);
+    if (!r) return;
+    const low = numOrNull(row.querySelector<HTMLInputElement>('.low')!.value);
+    const high = numOrNull(row.querySelector<HTMLInputElement>('.high')!.value);
+    const unit = row.querySelector<HTMLInputElement>('.unit')!.value.trim();
+    btn.disabled = true;
+    setRowMsg(row, 'Saqlanmoqda…', '');
+    try {
+      const res = await send('POST', { name: r.name, gender: r.gender, low, high, unit });
+      const data = (await res.json()) as { error?: string };
+      if (res.ok) Object.assign(r, { low, high, unit });
+      setRowMsg(row, res.ok ? 'Saqlandi' : (data.error ?? 'Xato'), res.ok ? 'ok' : 'error');
+    } catch {
+      setRowMsg(row, 'Internetga ulanishda muammo', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function delRow(btn: HTMLButtonElement) {
+    const row = btn.closest<HTMLElement>('.row')!;
+    const id = row.dataset.id!;
+    btn.disabled = true;
+    setRowMsg(row, 'O‘chirilmoqda…', '');
+    try {
+      const res = await send('DELETE', { id });
+      if (res.ok) {
+        refs = refs.filter((x) => x.id !== id);
+        render();
+        return;
+      }
+      const data = (await res.json()) as { error?: string };
+      setRowMsg(row, data.error ?? 'Xato', 'error');
+    } catch {
+      setRowMsg(row, 'Internetga ulanishda muammo', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  const setAddMsg = (text: string, kind: 'ok' | 'error' | '') => {
+    const m = el('addMsg');
+    m.textContent = text;
+    m.className = `form-msg${kind ? ` ${kind}` : ''}`;
+  };
+
+  el<HTMLFormElement>('addForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = el<HTMLInputElement>('fName').value.trim();
+    const gender = el<HTMLSelectElement>('fGender').value as Gender;
+    const low = numOrNull(el<HTMLInputElement>('fLow').value);
+    const high = numOrNull(el<HTMLInputElement>('fHigh').value);
+    const unit = el<HTMLInputElement>('fUnit').value.trim();
+    if (!name) return setAddMsg('Ko‘rsatkich nomini kiriting', 'error');
+    if (low === null && high === null) return setAddMsg('Kamida bitta chegara kiriting', 'error');
+
+    el<HTMLButtonElement>('addBtn').disabled = true;
+    setAddMsg('Saqlanmoqda…', '');
+    try {
+      const res = await send('POST', { name, gender, low, high, unit });
+      const data = (await res.json()) as { error?: string; reference?: Reference };
+      if (!res.ok || !data.reference) {
+        setAddMsg(data.error ?? 'Xato', 'error');
+        return;
+      }
+      // Ro'yxatda bor bo'lsa (nom+jins) yangilaymiz, aks holda qo'shamiz.
+      const idx = refs.findIndex((x) => x.id === data.reference!.id);
+      if (idx >= 0) refs[idx] = data.reference;
+      else refs.push(data.reference);
+      refs.sort((a, b) => a.name.localeCompare(b.name, 'uz') || a.gender.localeCompare(b.gender));
+      render();
+      setAddMsg('Qo‘shildi', 'ok');
+      el<HTMLInputElement>('fName').value = '';
+      el<HTMLInputElement>('fLow').value = '';
+      el<HTMLInputElement>('fHigh').value = '';
+      el<HTMLInputElement>('fUnit').value = '';
+      el<HTMLInputElement>('fName').focus();
+    } catch {
+      setAddMsg('Internetga ulanishda muammo', 'error');
+    } finally {
+      el<HTMLButtonElement>('addBtn').disabled = false;
+    }
+  });
+
+  async function load() {
+    try {
+      const res = await fetch('/api/admin-references', { credentials: 'same-origin' });
+      if (res.status === 401 || res.status === 403) {
+        const body = res.status === 403 ? ((await res.json()) as { telegramId?: string }) : {};
+        showSignIn(
+          res.status,
+          [
+            t('denied.admin', getLang()),
+            body.telegramId
+              ? `Sizning Telegram ID: ${body.telegramId} — buni Netlify’da ADMIN_TELEGRAM_IDS ga qo‘ying.`
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' '),
+          'denied',
+        );
+        return;
+      }
+      if (!res.ok) throw new Error(String(res.status));
+      refs = ((await res.json()) as { references: Reference[] }).references;
+    } catch {
+      el('loading').textContent = 'Ma’lumotlarni yuklab bo‘lmadi. Sahifani yangilang.';
+      return;
+    }
+
+    el('loading').hidden = true;
+    el('content').hidden = false;
+    render();
+  }
+
+  load();
+</script>
+
+<style>
+  .sub {
+    display: block;
+    color: var(--rose);
+    font-weight: 650;
+    font-size: 14px;
+    margin-top: 4px;
+  }
+
+  .state {
+    text-align: center;
+    padding: 48px 0;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .state .btn {
+    margin-top: 16px;
+  }
+
+  .card {
+    border-radius: 16px;
+    padding: var(--card-pad);
+    margin-bottom: 16px;
+  }
+
+  .card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .card h2 {
+    font-size: 12px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+    font-family: var(--font-sans);
+  }
+
+  .hint {
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .add-form {
+    display: flex;
+    gap: 8px 16px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .fld {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .fld span {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .fld.big {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .fld input,
+  .fld select {
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font: inherit;
+    font-size: 14px;
+  }
+
+  .fld input[type='number'] {
+    width: 110px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .fld input:focus,
+  .fld select:focus {
+    border-color: var(--leaf);
+    outline: none;
+  }
+
+  .form-msg,
+  .empty {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-top: 12px;
+    min-height: 18px;
+  }
+
+  .form-msg.ok {
+    color: var(--leaf);
+  }
+
+  .form-msg.error {
+    color: var(--rose);
+  }
+
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  :global(.row) {
+    display: flex;
+    align-items: center;
+    gap: 8px 16px;
+    flex-wrap: wrap;
+    padding: 16px;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 12px;
+  }
+
+  :global(.row-main) {
+    flex: 1;
+    min-width: 160px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  :global(.row-main b) {
+    font-size: 14.5px;
+    font-weight: 650;
+  }
+
+  :global(.row-main small) {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  :global(.num-fld) {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  :global(.num-fld input) {
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font: inherit;
+    font-size: 14px;
+    width: 96px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  :global(.num-fld.unit input) {
+    width: 80px;
+  }
+
+  :global(.num-fld input:focus) {
+    border-color: var(--leaf);
+    outline: none;
+  }
+
+  :global(.mini) {
+    border: 1px solid var(--card-brd);
+    background: var(--card);
+    color: var(--leaf);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  :global(.mini:hover) {
+    border-color: var(--leaf);
+  }
+
+  :global(.mini.danger) {
+    color: var(--rose);
+  }
+
+  :global(.mini.danger:hover) {
+    border-color: var(--rose);
+  }
+
+  :global(.mini:disabled) {
+    opacity: 0.6;
+  }
+
+  :global(.row-msg) {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+    min-width: 72px;
+  }
+
+  :global(.row-msg.ok) {
+    color: var(--leaf);
+  }
+
+  :global(.row-msg.error) {
+    color: var(--rose);
+  }
+
+  @media (max-width: 600px) {
+    .card {
+      padding: 16px;
+    }
+  }
+</style>

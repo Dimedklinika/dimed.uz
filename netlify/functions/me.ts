@@ -1,6 +1,5 @@
 import type { Context } from '@netlify/functions';
-import { QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLES } from './lib/db.ts';
+import { TABLES, queryAllPages } from './lib/db.ts';
 import { sessionFrom, getDoctor } from './lib/auth.ts';
 import { isConfirmed } from './lib/appointments.ts';
 import { isBookable } from './lib/slots.ts';
@@ -48,19 +47,30 @@ type AppointmentRow = {
   patient_name?: string;
 };
 
+/*
+  Bitta telefondagi (oila) yozuvlarning yuqori chegarasi.
+
+  Avval bitta sahifa `Limit: 50` bilan o'qilardi va filtr undan KEYIN
+  qo'llanardi: ko'chirilgan va bekor qilingan yozuvlar ham 50 talikni
+  egallab, eski qabullar tarixdan jimgina yo'qolardi. Endi hamma sahifa
+  o'qiladi; chegara faqat cheksiz aylanib qolmaslik uchun. Eng yangilari
+  oldin keladi — chegaraga yetsa, eng eski yozuvlar tushib qoladi.
+*/
+const MAX_APPOINTMENT_ROWS = 1000;
+
 async function loadAppointments(phone: string) {
-  const found = await db.send(
-    new QueryCommand({
+  const found = await queryAllPages(
+    {
       TableName: TABLES.appointments,
       IndexName: 'patient-index',
       KeyConditionExpression: 'phone = :p',
       ExpressionAttributeValues: { ':p': phone },
       ScanIndexForward: false,
-      Limit: 50,
-    }),
+    },
+    MAX_APPOINTMENT_ROWS,
   );
 
-  const rows = ((found.Items ?? []) as AppointmentRow[]).filter(
+  const rows = (found as AppointmentRow[]).filter(
     /*
       Tugallanmagan hold va ko'chirilgan yozuvlar ko'rsatilmaydi
       (ko'chirilganining o'rniga yangisi turadi), klinika bekor

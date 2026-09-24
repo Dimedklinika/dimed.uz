@@ -8,7 +8,7 @@
  * Widget (inline skript) va kirish sahifasi (modul) ikkalasi shu
  * yordamchilarni ishlatadi.
  */
-import type { Lang } from '../data/i18n';
+import type { Lang } from '../data/i18n.ts';
 
 export const MONTHS: Record<Lang, string[]> = {
   uz: ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'],

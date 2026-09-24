@@ -439,7 +439,9 @@ const featuredAnalyses = featured
     }
 
     .shot img {
-      aspect-ratio: 4 / 3;
+      /* Telefonda rasmlar kamroq o'rin egallasin — ko'z asosiy maqsadga
+         tez yetsin, galereya sahifani egallab yubormasin. */
+      aspect-ratio: 16 / 10;
     }
   }
   section {
@@ -1168,5 +1170,50 @@ const featuredAnalyses = featured
   .dept-card .go:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+
+  /*
+    Mobil-first tozalash (Task 2). Telefonda: elementlar tartibli tursin
+    (sochilmasin), mayda matnlar biroz kattaroq (o'qishga qulay) va ko'z
+    darhol asosiy maqsadga — navbat olishga — qaratilsin. Ranglar
+    palitrasi o'zgarmaydi, faqat joylashuv va o'lcham.
+  */
+  @media (max-width: 560px) {
+    /* Hero: asosiy tugma keng, statlar tartibli 2 ustun (tarqoq emas) */
+    .hero-cta .btn {
+      flex: 1 1 100%;
+    }
+
+    .hero-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .stat-chip {
+      justify-content: center;
+      text-align: center;
+    }
+
+    /* Shifokor kartasi: "Navbat olish" keng va ko'zga tashlanadigan */
+    .doc-card .foot {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 12px;
+    }
+
+    .doc-card .foot .btn {
+      width: 100%;
+    }
+
+    /* Mayda yozuvlarni o'qishga qulayroq */
+    .doc-card .slotlen {
+      font-size: 12.5px;
+    }
+
+    .doc-card .m-chip,
+    .dept-card .cnt {
+      font-size: 12px;
+    }
   }
 </style>

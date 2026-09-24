@@ -27,7 +27,7 @@ process.env.PAYME_MERCHANT_ID = 'test-kassa';
 process.env.PAYME_KEY = 'payme-secret';
 process.env.ADMIN_TELEGRAM_IDS = '424242';
 
-import { startFakeDynamo, stopFakeDynamo, seed, tableOf } from './fake-dynamo.mjs';
+import { startFakeDynamo, stopFakeDynamo, seed, tableOf, callCount } from './fake-dynamo.mjs';
 
 process.env.DIMED_DYNAMO_ENDPOINT = await startFakeDynamo();
 
@@ -51,6 +51,7 @@ const { createSessionCookie } = await import(
 
 const telegramWebhook = await load('telegram-webhook.ts');
 const authVerify = await load('auth-verify.ts');
+const authStart = await load('auth-start.ts');
 const slots = await load('slots.ts');
 const book = await load('book.ts');
 const me = await load('me.ts');
@@ -71,6 +72,7 @@ const resultApi = await load('result.ts');
 const appointmentStatus = await load('appointment-status.ts');
 const pricesApi = await load('prices.ts');
 const adminPrices = await load('admin-prices.ts');
+const adminReferences = await load('admin-references.ts');
 const notifyResults = await load('notify-results.ts');
 const askRatings = await load('ask-ratings.ts');
 const adminRatings = await load('admin-ratings.ts');
@@ -125,18 +127,25 @@ seed('test_doctors', 'ashurov', {
 
 console.log('Telegram bot va OTP:');
 await test('webhook noto\'g\'ri secret bilan rad etiladi', async () => {
-  const res = await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
-    ...jsonBody({ message: { chat: { id: 1 }, text: '/start' } }),
-    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'yolgon' },
-  });
-  assert.equal(res.status, 401);
+  // 'webhook-secreX' — to'g'risi bilan bir xil uzunlikda (taqqoslash
+  // oxirigacha boradi); sarlavhasiz so'rov ham 500 emas, 401 olishi kerak.
+  for (const given of ['yolgon', 'webhook-secreX', undefined]) {
+    const res = await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+      ...jsonBody({ message: { chat: { id: 1 }, text: '/start' } }),
+      headers: {
+        'content-type': 'application/json',
+        ...(given === undefined ? {} : { 'x-telegram-bot-api-secret-token': given }),
+      },
+    });
+    assert.equal(res.status, 401, String(given));
+  }
 });
 
 await test('kontakt yuborilganda foydalanuvchi va OTP yaratiladi', async () => {
   telegramCalls.length = 0;
   const res = await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
     ...jsonBody({
-      message: { chat: { id: 777 }, contact: { phone_number: '998901234567', first_name: 'Aziza' } },
+      message: { chat: { id: 777 }, contact: { phone_number: '998901234567', user_id: 777, first_name: 'Aziza' } },
     }),
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
   });
@@ -147,6 +156,106 @@ await test('kontakt yuborilganda foydalanuvchi va OTP yaratiladi', async () => {
   assert.ok(telegramCalls.some((c) => c.body.text.includes(otp.code)), 'kod botga yuborilishi kerak');
 });
 
+await test('begona kontakt (user_id yuboruvchiga mos kelmaydi) rad etiladi', async () => {
+  // Hujum: birov botga BEGONA raqamli kontaktni yuboradi (attachment →
+  // Contact). Agar qabul qilinsa, o'sha telefon uchun kod olib, begona
+  // hisobga kirib bo'lardi. user_id mos kelmagani uchun rad etilishi kerak.
+  telegramCalls.length = 0;
+  const res = await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({
+      message: {
+        chat: { id: 66601 },
+        from: { id: 66601 },
+        contact: { phone_number: '998900000001', user_id: 424243, first_name: 'Begona' },
+      },
+    }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(tableOf('test_users').get('66601'), undefined, 'begona hisob yaratilmasligi kerak');
+  assert.equal(tableOf('test_otp_codes').get('+998900000001'), undefined, 'begona raqamga kod yaratilmasligi kerak');
+  assert.ok(
+    !telegramCalls.some((c) => /kirish kodingiz/.test(c.body.text ?? '')),
+    'kod yuborilmasligi kerak',
+  );
+  assert.ok(
+    telegramCalls.some((c) => c.body.reply_markup?.keyboard),
+    'o\'z raqamini ulashish tugmasi qaytishi kerak',
+  );
+
+  // user_id umuman bo'lmagan kontakt ham rad etiladi (Telegram'da yo'q raqam).
+  telegramCalls.length = 0;
+  await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({
+      message: {
+        chat: { id: 66602 },
+        from: { id: 66602 },
+        contact: { phone_number: '998900000002', first_name: 'Begona2' },
+      },
+    }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+  assert.equal(tableOf('test_otp_codes').get('+998900000002'), undefined, 'user_id\'siz kontakt ham rad etilishi kerak');
+});
+
+const tgMessage = (message) =>
+  call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({ message }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+
+await test('chet el raqami begona O\'zbek raqamiga aylanmaydi — rad etiladi', async () => {
+  // Avval +7 999 123 45 67 "oxirgi 9 xona + 998" qilib +998 99 123 45 67
+  // ga aylanardi — bu begona bemorning raqami. 9 xonali chet el raqami
+  // (688901234) esa hatto parsePhone'dan o'tib ketardi.
+  telegramCalls.length = 0;
+  for (const [chatId, phone] of [[66603, '79991234567'], [66604, '688901234']]) {
+    await tgMessage({ chat: { id: chatId }, contact: { phone_number: phone, user_id: chatId, first_name: 'Chet' } });
+    assert.equal(tableOf('test_users').get(String(chatId)), undefined, `${phone}: hisob yaratilmasligi kerak`);
+  }
+  assert.equal(tableOf('test_otp_codes').get('+998991234567'), undefined, 'begona O\'zbek raqamiga kod yaratilmasligi kerak');
+  assert.equal(tableOf('test_otp_codes').get('+998688901234'), undefined);
+  assert.ok(telegramCalls.every((c) => !/kirish kodingiz/.test(c.body.text ?? '')), 'kod yuborilmasligi kerak');
+  assert.ok(telegramCalls.some((c) => /O‘zbekiston raqami/.test(c.body.text ?? '')), 'sababi aytilishi kerak');
+});
+
+await test('chet el raqami ulashilsa, eski yozuvdagi begona raqam olib tashlanadi', async () => {
+  // Oldingi kod +7 999 555 00 40 ni +998 99 555 00 40 qilib saqlagan bo'lishi
+  // mumkin — o'sha bemorning natija xabarlari bu hisobga ketmasligi kerak.
+  seed('test_users', '66607', { telegram_id: '66607', phone: '+998995550040', lang: 'ru' });
+  await tgMessage({ chat: { id: 66607 }, contact: { phone_number: '79995550040', user_id: 66607, first_name: 'Chet' } });
+  const user = tableOf('test_users').get('66607');
+  assert.equal(user.phone, undefined, 'begona raqam yozuvdan olib tashlanishi kerak');
+  assert.equal(user.lang, 'ru', 'qolgan sozlamalar saqlanadi');
+  assert.equal(tableOf('test_otp_codes').get('+998995550040'), undefined);
+});
+
+await test('"+" bilan kelgan O\'zbek raqami qabul qilinadi', async () => {
+  await tgMessage({ chat: { id: 66605 }, contact: { phone_number: '+998905550002', user_id: 66605, first_name: 'Plus' } });
+  assert.equal(tableOf('test_users').get('66605').phone, '+998905550002');
+  assert.match(tableOf('test_otp_codes').get('+998905550002').code, /^\d{6}$/);
+});
+
+await test('tasdiq belgisiz eski yozuv /start da kontaktni qayta ulashadi', async () => {
+  // Avvalgi kod chet el raqamini begona O'zbek raqamiga aylantirib
+  // saqlagan bo'lishi mumkin — bunday (tekshirilmagan) telefonga kod ketmaydi.
+  seed('test_users', '66606', { telegram_id: '66606', phone: '+998905550003' });
+  telegramCalls.length = 0;
+  await tgMessage({ chat: { id: 66606 }, text: '/start' });
+  assert.equal(tableOf('test_otp_codes').get('+998905550003'), undefined, 'tekshirilmagan telefonga kod ketmasligi kerak');
+  assert.ok(
+    telegramCalls.some((c) => c.body.reply_markup?.keyboard && /qayta tasdiqlang/.test(c.body.text ?? '')),
+    'raqamni qayta tasdiqlash so\'ralishi kerak',
+  );
+
+  // Kontakt ulashilgach belgi qo'yiladi va keyingi /start darhol kod beradi.
+  await tgMessage({ chat: { id: 66606 }, contact: { phone_number: '998905550003', user_id: 66606, first_name: 'Eski' } });
+  assert.ok(tableOf('test_users').get('66606').contact_verified_at, 'tasdiq belgisi qo\'yilishi kerak');
+  telegramCalls.length = 0;
+  await tgMessage({ chat: { id: 66606 }, text: '/start' });
+  assert.ok(telegramCalls.some((c) => /kirish kodingiz/.test(c.body.text ?? '')), 'endi kod darhol kelishi kerak');
+});
+
 await test('kontaktda 1C profili birlashadi (individuals jadvalidan)', async () => {
   seed('test_individuals', '+998907777777|1146', {
     phone: '+998907777777', sort_key: '1146',
@@ -155,7 +264,7 @@ await test('kontaktda 1C profili birlashadi (individuals jadvalidan)', async () 
   });
   const res = await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
     ...jsonBody({
-      message: { chat: { id: 888 }, contact: { phone_number: '998907777777', first_name: 'Rozi' } },
+      message: { chat: { id: 888 }, contact: { phone_number: '998907777777', user_id: 888, first_name: 'Rozi' } },
     }),
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
   });
@@ -241,6 +350,77 @@ await test('kirishda 1C profili yangilanadi', async () => {
   assert.equal(tableOf('test_users').get('777').last_name, 'Azizova');
 });
 
+console.log('\n"Kodni olish" (deep-link kirish, A-auth):');
+const startLogin = async () => {
+  const res = await call(authStart, 'https://dimed.uz/api/auth-start', { method: 'POST' });
+  assert.equal(res.status, 200);
+  return res.json();
+};
+const pollLogin = (nonce) =>
+  call(authStart, `https://dimed.uz/api/auth-start?nonce=${encodeURIComponent(nonce)}`, { method: 'GET' });
+const startCmd = (chatId, nonce) =>
+  call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({ message: { chat: { id: chatId }, text: `/start kirish_${nonce}` } }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+
+await test('auth-start nonce va bot deep-link havolasini beradi', async () => {
+  const { nonce, deepLink } = await startLogin();
+  assert.match(nonce, /^[A-Za-z0-9_-]{16,64}$/);
+  assert.ok(deepLink.includes(`start=kirish_${nonce}`), 'deep-link nonce bilan bo\'lishi kerak');
+  assert.equal(tableOf('test_login_sessions').get(nonce).status, 'pending');
+});
+
+await test('poll: boshda pending, noma\'lum nonce expired, buzuq nonce 400', async () => {
+  const { nonce } = await startLogin();
+  assert.equal((await (await pollLogin(nonce)).json()).status, 'pending');
+  assert.equal((await (await pollLogin('yoq0123456789abcd')).json()).status, 'expired');
+  assert.equal((await pollLogin('qisqa')).status, 400);
+});
+
+await test('bog\'langan telefon: /start kirish_<nonce> → ready va kod keladi', async () => {
+  telegramCalls.length = 0;
+  const { nonce } = await startLogin();
+  // chat 777 telefoni allaqachon bog'langan (+998901234567).
+  const res = await startCmd(777, nonce);
+  assert.equal(res.status, 200);
+  const sess = tableOf('test_login_sessions').get(nonce);
+  assert.equal(sess.status, 'ready');
+  assert.equal(sess.phone, '+998901234567');
+  const p = await (await pollLogin(nonce)).json();
+  assert.equal(p.status, 'ready');
+  assert.equal(p.phone, '+998901234567');
+  assert.ok(
+    telegramCalls.some((c) => c.body.text?.includes('kirish kodingiz')),
+    'kod ham yuborilishi kerak',
+  );
+});
+
+await test('yangi bemor: nonce kontakt ulashilgach ready bo\'ladi', async () => {
+  const { nonce } = await startLogin();
+  // Telefoni yo'q chat — /start nonce bilan: nonce eslab qolinadi, ready emas.
+  await startCmd(9099, nonce);
+  assert.equal(tableOf('test_users').get('9099').pending_login_nonce, nonce);
+  assert.equal((await (await pollLogin(nonce)).json()).status, 'pending');
+
+  // Kontakt ulashildi → kirish sessiyasi ready bo'ladi, nonce iste'mol qilinadi.
+  await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({
+      message: { chat: { id: 9099 }, contact: { phone_number: '998901112233', user_id: 9099, first_name: 'Yangi' } },
+    }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+  const p = await (await pollLogin(nonce)).json();
+  assert.equal(p.status, 'ready');
+  assert.equal(p.phone, '+998901112233');
+  assert.equal(tableOf('test_users').get('9099').pending_login_nonce, undefined, 'nonce iste\'mol qilinadi');
+});
+
+await test('auth-start faqat GET/POST qabul qiladi', async () => {
+  const res = await call(authStart, 'https://dimed.uz/api/auth-start', { method: 'DELETE' });
+  assert.equal(res.status, 405);
+});
+
 console.log('\nKirish kodini himoyalash:');
 const otpFor = (phone, code) => seed('test_otp_codes', phone, {
   phone, code, telegram_id: '999', expires_at: Math.floor(Date.now() / 1000) + 300,
@@ -295,6 +475,43 @@ await test('noto\'g\'ri formatdagi raqam bazaga umuman bormaydi', async () => {
     const res = await tryCode(bad, '111111');
     assert.equal(res.status, 400, `${bad} rad etilishi kerak`);
   }
+});
+
+// Har test o'z IP sidan: umumiy '-' savatchasi (soatiga 30) boshqa testlarga ulashilgan.
+const tryCodeFrom = (ip, phone, code) =>
+  call(authVerify, 'https://dimed.uz/api/auth-verify', {
+    ...jsonBody({ phone, code }),
+    headers: { 'content-type': 'application/json', 'x-nf-client-connection-ip': ip },
+  });
+
+await test('bir vaqtdagi so\'rovlar urinish chegarasidan o\'tolmaydi', async () => {
+  /*
+    Avval kod o'qilib, urinish taqqoslashdan keyin sanalardi: bir vaqtda
+    kelgan so'rovlarning hammasi eski hisobni ko'rib, har biri o'z
+    taxminini tekshirtirardi. Bitta urinishi qolgan kodni 5 ta so'rov
+    birdan sinaydi — to'g'ri kod bilan, shunda nechtasi tekshirilgani
+    o'tganlar sonidan ko'rinadi.
+  */
+  const phone = '+998900000104';
+  seed('test_otp_codes', phone, {
+    phone, code: '444444', telegram_id: '999', expires_at: Math.floor(Date.now() / 1000) + 300, attempts: 4,
+  });
+  const results = await Promise.all(
+    Array.from({ length: 5 }, () => tryCodeFrom('10.0.0.104', phone, '444444')),
+  );
+  const passedCount = results.filter((r) => r.status === 200).length;
+  assert.equal(passedCount, 1, `bitta urinish — bitta tekshiruv, o'tdi: ${passedCount}`);
+});
+
+await test('urinishlari tugagan kod to\'g\'ri bo\'lsa ham o\'tmaydi', async () => {
+  // Beshinchi noto'g'ri urinish sanalgan, lekin yozuv hali o'chmagan payt.
+  const phone = '+998900000105';
+  seed('test_otp_codes', phone, {
+    phone, code: '555555', telegram_id: '999', expires_at: Math.floor(Date.now() / 1000) + 300, attempts: 5,
+  });
+  const res = await tryCodeFrom('10.0.0.105', phone, '555555');
+  assert.equal(res.status, 401);
+  assert.equal(res.headers.get('set-cookie'), null, 'sessiya berilmasligi kerak');
 });
 
 console.log('\nSlotlar:');
@@ -476,6 +693,29 @@ await test('bemor o\'z qabulini ko\'radi', async () => {
   assert.equal(data.appointments.length, 1);
   assert.equal(data.appointments[0].doctorName, 'Ashurov Tursunali');
   assert.equal(data.appointments[0].upcoming, true);
+});
+
+await test('ko\'p yozuvli bemor hamma qabulini ko\'radi (50 tadan ko\'p — sahifalab)', async () => {
+  // Avval bitta sahifa `Limit: 50` bilan o'qilardi va filtr undan keyin
+  // qo'llanardi: yangi ko'chirilgan yozuvlar 50 talikni egallab, eski
+  // qabullar tarixdan jimgina yo'qolardi.
+  const phone = '+998905550001';
+  for (let i = 0; i < 70; i++) {
+    const date = addDays('2019-01-01', i);
+    seed('test_appointments', `ashurov#${date}|09:00`, {
+      doctor_day: `ashurov#${date}`, time: '09:00', doctor_id: 'ashurov', date,
+      phone, telegram_id: '5550001', starts_at: toInstant(date, '09:00').toISOString(),
+      // 60 tasi o'tgan qabul; eng yangi 10 tasi ko'chirilgan (ro'yxatda ko'rinmaydi).
+      status: i < 60 ? 'done' : 'moved',
+      price: 70000, created_at: new Date().toISOString(),
+    });
+  }
+  const cookie = createSessionCookie({ phone, userId: '5550001' }).split(';')[0];
+  const data = await (await call(me, 'https://dimed.uz/api/me?include=appointments', {
+    headers: { cookie },
+  })).json();
+  assert.equal(data.appointments.length, 60, 'barcha o\'tgan qabullar ko\'rinishi kerak');
+  assert.ok(data.appointments.every((a) => a.status === 'done'), 'ko\'chirilganlar ko\'rinmasligi kerak');
 });
 
 await test('1C natijasi kabinetda ko\'rinadi', async () => {
@@ -667,7 +907,7 @@ await test('bir telefondagi oiladan Telegram egasi tanlanadi', async () => {
     ...jsonBody({
       message: {
         chat: { id: 555 },
-        contact: { phone_number: '998909999999', first_name: 'Nilufar', last_name: 'Yoldosheva' },
+        contact: { phone_number: '998909999999', user_id: 555, first_name: 'Nilufar', last_name: 'Yoldosheva' },
       },
     }),
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
@@ -691,7 +931,7 @@ await test('o\'chirishga belgilangan bemor profil sifatida olinmaydi', async () 
 
   await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
     ...jsonBody({
-      message: { chat: { id: 557 }, contact: { phone_number: '998907777770', first_name: 'Yozuv' } },
+      message: { chat: { id: 557 }, contact: { phone_number: '998907777770', user_id: 557, first_name: 'Yozuv' } },
     }),
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
   });
@@ -709,7 +949,7 @@ await test('1C kodidagi guruh ajratkichi tozalanadi', async () => {
 
   await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
     ...jsonBody({
-      message: { chat: { id: 556 }, contact: { phone_number: '998908888888', first_name: 'Sardor' } },
+      message: { chat: { id: 556 }, contact: { phone_number: '998908888888', user_id: 556, first_name: 'Sardor' } },
     }),
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
   });
@@ -855,6 +1095,28 @@ await test('natija ro\'yxatida tahlil nomi, holati va shifokor bor (C2)', async 
 
   const bio = data.results.find((r) => r.id === 'doc-bio');
   assert.equal(bio.title, 'Qon tahlili', 'panel tanilmasa biomaterial bo\'yicha');
+});
+
+await test('1C ruscha nom va ko\'rsatkichlarni o\'zbekchaga o\'giradi (I1)', async () => {
+  seed('test_analysis_results', '+998901234567|doc-ru', {
+    phone: '+998901234567', sort_key: 'doc-ru', Date: '10.03.2026 10:00:00',
+    AnalysisName: 'Общий анализ крови', Doctor: 'Ivanova R.',
+    AnalysisResults: [
+      { Analyte: 'Гемоглобин', Result: '132', AnalyteUnit: 'g/L' },
+      { Analyte: 'Билирубин общий', Result: '12', AnalyteUnit: 'mkmol/l' },
+    ],
+  });
+
+  const data = await (await call(me, 'https://dimed.uz/api/me?include=results', {
+    headers: { cookie: sessionCookie },
+  })).json();
+
+  const ru = data.results.find((r) => r.id === 'doc-ru');
+  assert.equal(ru.title, 'Umumiy qon tahlili', 'ruscha panel nomi o\'zbekchaga');
+  assert.equal(ru.titleKey, 'panel.cbc', 'ko\'p tilli sarlavha kaliti qo\'yiladi');
+  const nomlar = ru.items.map((i) => i.title);
+  assert.ok(nomlar.includes('Gemoglobin'), 'Гемоглобин → Gemoglobin');
+  assert.ok(nomlar.includes('Umumiy bilirubin'), 'Билирубин общий → Umumiy bilirubin');
 });
 
 console.log('\nNatija sahifasi (D1) va ulashish:');
@@ -1027,6 +1289,33 @@ await test('tez yugurish navbati yo\'q bemorni qaraydi, oldindagisini o\'tkazmay
     telegramCalls.some((c) => c.body.chat_id === '888' && c.body.text?.includes('Gemoglobin')),
     'to\'liq aylanishda natija haqida xabar ketadi',
   );
+});
+
+await test('bemorlar 25 tadan ko\'p bo\'lsa ham hammasiga xabar boradi', async () => {
+  // Scan javobi 1 MB da kesiladi (soxta jadvalda — 25 tada). Avval bitta
+  // sahifa o'qilardi: undan keyingi bemorlar natija xabarini olmasdi.
+  const chats = [];
+  for (let i = 0; i < 30; i++) {
+    const chat = String(70000 + i);
+    const phone = `+99893${7000000 + i}`;
+    chats.push(chat);
+    seed('test_users', chat, { telegram_id: chat, phone, results_notified: [] });
+    seed('test_analysis_results', `${phone}|sahifa-${i}`, {
+      phone, sort_key: `sahifa-${i}`, Date: '10.03.2026 09:00:00',
+      AnalysisResults: [{ Analyte: 'Gemoglobin', Result: '131', AnalyteUnit: 'g/L' }],
+    });
+  }
+
+  telegramCalls.length = 0;
+  const pricesBefore = callCount('Scan', 'test_prices');
+  const res = await call(notifyResults, 'https://dimed.uz/api/notify-results?mode=full');
+  assert.equal(res.status, 200);
+  const pricesScans = callCount('Scan', 'test_prices') - pricesBefore;
+
+  const missed = chats.filter((chat) => !telegramCalls.some((c) => c.body.chat_id === chat));
+  assert.deepEqual(missed, [], 'hamma bemorga xabar borishi kerak');
+  // Referenslar hamma uchun bir xil: ilgari har bemorda qayta o'qilardi.
+  assert.equal(pricesScans, 1, `prices jadvali ${pricesScans} marta o'qildi`);
 });
 
 console.log('\nBemorni tanlash (bir telefon — bir oila):');
@@ -1562,6 +1851,26 @@ await test('kun yopiladi va bemorlarga xabar boradi', async () => {
   assert.ok(telegramCalls.some((c) => c.body.text.includes('Kasal bo\'lib qoldim')));
 });
 
+await test('sabab matni Telegram HTML uchun ekranlanadi', async () => {
+  // `<` yoki `&` bo'lsa Telegram xabarni butunlay rad etardi ("can't parse
+  // entities") — bemor qabuli bekor qilinganini bilmay qolardi.
+  const day = addDays(toTashkent(new Date()).dateKey, 45);
+  seed('test_appointments', `ashurov#${day}|11:00`, {
+    doctor_day: `ashurov#${day}`, time: '11:00', doctor_id: 'ashurov', date: day,
+    phone: '+998905550005', telegram_id: '66608', starts_at: toInstant(day, '11:00').toISOString(),
+    status: 'booked', price: 70000, created_at: new Date().toISOString(),
+  });
+  telegramCalls.length = 0;
+  const res = await call(doctorOff, 'https://dimed.uz/api/doctor-off', {
+    ...jsonBody({ date: day, reason: 'Isitma <38> & yo\'tal' }),
+    headers: { 'content-type': 'application/json', cookie: doctorCookie },
+  });
+  assert.equal(res.status, 200);
+  const sent = telegramCalls.find((c) => c.body.chat_id === '66608');
+  assert.ok(sent, 'bemorga xabar ketishi kerak');
+  assert.ok(sent.body.text.includes('Sabab: Isitma &lt;38&gt; &amp; yo\'tal'), sent.body.text);
+});
+
 await test('bemor kabinetda bekor qilinganini ko\'radi', async () => {
   const data = await (await call(me, 'https://dimed.uz/api/me', { headers: { cookie: sessionCookie } })).json();
   const cancelled = data.appointments.find((a) => a.date === BOOK_DATE);
@@ -1804,6 +2113,98 @@ await test('admin-prices: shifokor qabuli narxi', async () => {
   });
 });
 
+console.log('\nAdmin — referens (me\'yoriy) oraliqlari (F4):');
+const postRef = (body, cookie = adminCookie) =>
+  call(adminReferences, 'https://dimed.uz/api/admin-references', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie },
+    body: JSON.stringify(body),
+  });
+
+await test('admin-references: ruxsat va tekshiruv', async () => {
+  assert.equal((await call(adminReferences, 'https://dimed.uz/api/admin-references')).status, 401);
+  assert.equal(
+    (await call(adminReferences, 'https://dimed.uz/api/admin-references', { headers: { cookie: sessionCookie } })).status,
+    403,
+  );
+  assert.equal((await postRef({ gender: 'male', low: 1, high: 2 })).status, 400, 'nomsiz');
+  assert.equal((await postRef({ name: 'X' })).status, 400, 'chegarasiz');
+  assert.equal((await postRef({ name: 'X', low: 9, high: 1 })).status, 400, 'past > yuqori');
+});
+
+await test('admin-references: qo\'shish, ro\'yxat, ommaviyga chiqmaydi', async () => {
+  const res = await postRef({ name: 'Gemoglobin', gender: 'male', low: 130, high: 170, unit: 'g/L' });
+  assert.equal(res.status, 200);
+  assert.equal(tableOf('test_prices').get('reference#gemoglobin#male').low, 130);
+
+  const list = await (await call(adminReferences, 'https://dimed.uz/api/admin-references', {
+    headers: { cookie: adminCookie },
+  })).json();
+  assert.ok(list.references.some((r) => r.name === 'Gemoglobin' && r.gender === 'male' && r.high === 170));
+
+  // Ommaviy /api/prices referenslarni bermaydi (faqat kind=analysis).
+  const pub = await (await call(pricesApi, 'https://dimed.uz/api/prices')).json();
+  assert.ok(!pub.analyses.some((a) => a.code === undefined || String(a.title) === 'Gemoglobin' && a.group === ''), 'referens ommaviyga chiqmasin');
+});
+
+await test('admin referens 1C bermagan oraliqni to\'ldiradi (natijada holat)', async () => {
+  // 1C oraliqsiz Gemoglobin (erkak bemor). Admin referensi: 130–170.
+  seed('test_analysis_results', '+998901234567|doc-ref', {
+    phone: '+998901234567', sort_key: 'doc-ref', Date: '12.03.2026 09:00:00',
+    PatientIsMale: true,
+    AnalysisResults: [{ Analyte: 'Gemoglobin', Result: '118', AnalyteUnit: 'g/L' }],
+  });
+  const data = await (await call(me, 'https://dimed.uz/api/me?include=results', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  const doc = data.results.find((r) => r.id === 'doc-ref');
+  const hgb = doc.items[0];
+  assert.equal(hgb.reference, '130 — 170', 'admin referensi qo\'yiladi');
+  assert.equal(hgb.status, 'low', '118 < 130 → past');
+
+  // Tozalash: keyingi testlarga ta'sir qilmasin.
+  const del = await call(adminReferences, 'https://dimed.uz/api/admin-references', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ id: 'reference#gemoglobin#male' }),
+  });
+  assert.equal(del.status, 200);
+  assert.equal(tableOf('test_prices').has('reference#gemoglobin#male'), false);
+});
+
+await test('admin referensi boshqa birlikdagi natijaga qo\'llanmaydi', async () => {
+  // Admin oralig'i g/L da, 1C natijasi g/dL da: 13.5 g/dL me'yorda, lekin
+  // 130–170 bilan taqqoslansa bemor "past" belgisini ko'rardi.
+  assert.equal((await postRef({ name: 'Gemoglobin', gender: 'male', low: 130, high: 170, unit: 'g/L' })).status, 200);
+  // Birlik kirillcha yozilgan — natijadagi "mmol/L" bilan bir xil.
+  assert.equal((await postRef({ name: 'Glyukoza', gender: 'all', low: 3.9, high: 6.1, unit: 'ммоль/л' })).status, 200);
+  seed('test_analysis_results', '+998901234567|doc-birlik', {
+    phone: '+998901234567', sort_key: 'doc-birlik', Date: '13.03.2026 09:00:00',
+    PatientIsMale: true,
+    AnalysisResults: [
+      { Analyte: 'Gemoglobin', Result: '13.5', AnalyteUnit: 'g/dL' },
+      { Analyte: 'Glyukoza', Result: '7.2', AnalyteUnit: 'mmol/L' },
+    ],
+  });
+  const data = await (await call(me, 'https://dimed.uz/api/me?include=results', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  const [hgb, glu] = data.results.find((r) => r.id === 'doc-birlik').items;
+  assert.equal(hgb.reference, null, 'boshqa birlikdagi oraliq qo\'yilmaydi');
+  assert.equal(hgb.status, null, 'noto\'g\'ri "past" chiqmasligi kerak');
+  assert.equal(glu.reference, '3.9 — 6.1', 'bir xil birlik — turlicha yozilgan');
+  assert.equal(glu.status, 'high');
+
+  for (const id of ['reference#gemoglobin#male', 'reference#glyukoza#all']) {
+    const del = await call(adminReferences, 'https://dimed.uz/api/admin-references', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({ id }),
+    });
+    assert.equal(del.status, 200);
+  }
+});
+
 console.log('\nBaho (G2/F3):');
 const RATE_DATE = addDays(BOOK_DATE, 1);
 const YESTERDAY = addDays(toTashkent(new Date()).dateKey, -1);
@@ -1995,6 +2396,21 @@ await test('admin baholar ro\'yxati va yashirish (F3)', async () => {
   assert.equal(show.status, 200);
   assert.equal(tableOf('test_doctors').get('ashurov').rating_count, 1);
   assert.equal(tableOf('test_doctors').get('ashurov').rating_sum, 5);
+});
+
+await test('baholar 25 tadan ko\'p bo\'lsa ham admin ro\'yxatida hammasi bor', async () => {
+  // Bitta Scan 1 MB da kesiladi (soxta jadvalda — 25 tada): qolgan
+  // baholar admin ro'yxatidan jimgina tushib qolardi.
+  for (let i = 0; i < 30; i++) {
+    const created = `2025-01-01T09:00:${String(i).padStart(2, '0')}.000Z`;
+    seed('test_ratings', `sahifa|${created}`, {
+      doctor_id: 'sahifa', created_at: created, rating: 4, date: '2025-01-01', time: '09:00',
+    });
+  }
+  const list = await (await call(adminRatings, 'https://dimed.uz/api/admin-ratings', {
+    headers: { cookie: adminRateCookie },
+  })).json();
+  assert.equal(list.ratings.filter((r) => r.doctorId === 'sahifa').length, 30);
 });
 
 console.log('\nBemor ro\'yxati to\'liq keladi:');
@@ -2289,6 +2705,21 @@ await test('PAYMENT_ENABLED o\'chiq bo\'lsa bron yana kassada to\'lash rejimida'
   const data = await res.json();
   assert.equal(data.mode, 'at_clinic');
   assert.equal(data.redirectUrl, undefined, 'to\'lov havolasi bo\'lmasligi kerak');
+});
+
+await test('GetStatement 25 tadan ko\'p tranzaksiyani to\'liq qaytaradi', async () => {
+  // Sverka to'lovlar jadvalini Scan qiladi: bitta sahifada qolsa, Payme
+  // bilan hisob-kitobda tranzaksiyalar yetishmasdi.
+  const base = 1_700_000_000_000;
+  for (let i = 0; i < 30; i++) {
+    seed('test_payments', `payme#sverka-${i}`, {
+      payment_id: `payme#sverka-${i}`, ref: `buyurtma-${i}`, state: 2,
+      create_time: base + i, created_at_ms: base + i, perform_time: base + i + 1000,
+    });
+  }
+  const res = await rpc('GetStatement', { from: base, to: base + 29 });
+  assert.equal(res.result.transactions.length, 30);
+  assert.ok(res.result.transactions.some((t) => t.id === 'sverka-29'), 'oxirgisi ham bor');
 });
 
 // ================= Admin: navbatlar va hisobot =================

@@ -6,7 +6,7 @@ import { sessionFrom, getDoctor } from './lib/auth.ts';
 import { doctorDayKey, isBookable } from './lib/slots.ts';
 import { isConfirmed, type Appointment } from './lib/appointments.ts';
 import { isDateKey, isTime } from './lib/time.ts';
-import { sendMessage, logToAdmin } from './lib/telegram.ts';
+import { sendMessage, logToAdmin, escapeHtml } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 import { hitLimit, tooMany } from './lib/rate-limit.ts';
 
@@ -76,7 +76,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       await sendMessage(
         session.userId,
         `❌ <b>Navbat bekor qilindi</b>\n\n` +
-          `Shifokor: ${doctor?.name ?? 'Shifokor'}\n` +
+          `Shifokor: ${escapeHtml(doctor?.name ?? 'Shifokor')}\n` +
           `Sana: ${date} · ${time}\n\n` +
           `Kerak bo'lsa saytdan yangi vaqt tanlashingiz mumkin.`,
       ).catch((err) => logToAdmin('cancel/xabar', err));

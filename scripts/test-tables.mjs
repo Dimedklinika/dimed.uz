@@ -26,7 +26,7 @@ const test = (name, fn) => {
 
 console.log('Jadval ta\'riflari:');
 
-test('13 ta jadval', () => assert.equal(tables.length, 13));
+test('14 ta jadval', () => assert.equal(tables.length, 14));
 
 test('har bir jadvalda nom, maydon va kalit bor', () => {
   for (const t of tables) {
@@ -104,7 +104,7 @@ test('bemor ma\'lumoti bor jadvallarda zaxira nusxa yoqiladi', () => {
 
   // Vaqtinchalik jadvallar zaxirasiz: ular TTL bilan o'zi o'chadi.
   const vaqtinchalik = tables.filter((t) => !t.backup).map((t) => t.name);
-  assert.deepEqual(vaqtinchalik.sort(), ['otp_codes', 'rate_limits']);
+  assert.deepEqual(vaqtinchalik.sort(), ['login_sessions', 'otp_codes', 'rate_limits']);
   assert.ok(
     vaqtinchalik.every((n) => tables.find((t) => t.name === n).ttlAttribute),
     'zaxirasiz jadvalda TTL bo\'lishi kerak',

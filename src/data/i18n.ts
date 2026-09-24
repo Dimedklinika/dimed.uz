@@ -98,6 +98,36 @@ export const messages = {
   },
   'signin.page.questions': { uz: 'Savollar boʻlsa:', ru: 'Вопросы:', en: 'Questions:' },
   'signin.page.welcome': { uz: 'Xush kelibsiz!', ru: 'Добро пожаловать!', en: 'Welcome!' },
+  // "Kodni olish" — bir tugmali kirish (A-auth UX)
+  'signin.page.step1new': {
+    uz: 'Telegram orqali kodni oling',
+    ru: 'Получите код через Telegram',
+    en: 'Get your code via Telegram',
+  },
+  'signin.page.getCode': { uz: 'Kodni olish', ru: 'Получить код', en: 'Get code' },
+  'signin.page.getCodeAgain': { uz: 'Kodni qayta olish', ru: 'Получить код снова', en: 'Get code again' },
+  'signin.page.opening': { uz: 'Telegram ochilmoqda…', ru: 'Открываем Telegram…', en: 'Opening Telegram…' },
+  'signin.page.waiting': {
+    uz: 'Botdan kod kutilmoqda… Telegramda «Boshlash» tugmasini bosing.',
+    ru: 'Ждём код от бота… нажмите «Начать» в Telegram.',
+    en: 'Waiting for the code… tap “Start” in Telegram.',
+  },
+  'signin.page.codeSent': {
+    uz: '✓ Kod Telegramga yuborildi. Uni pastdagi maydonga kiriting.',
+    ru: '✓ Код отправлен в Telegram. Введите его в поле ниже.',
+    en: '✓ Code sent to Telegram. Enter it in the field below.',
+  },
+  'signin.page.expired': {
+    uz: 'Havola eskirdi. «Kodni olish» ni qayta bosing.',
+    ru: 'Ссылка устарела. Нажмите «Получить код» ещё раз.',
+    en: 'The link expired. Tap “Get code” again.',
+  },
+  'signin.page.enterCode': {
+    uz: 'Bot yuborgan 6 xonali kodni kiriting',
+    ru: 'Введите 6-значный код из бота',
+    en: 'Enter the 6-digit code from the bot',
+  },
+  'signin.page.phoneLabel': { uz: 'Telefon raqamingiz', ru: 'Ваш номер телефона', en: 'Your phone number' },
 
   // kirishdan keyin: bir telefon — bir oila, kim kirayotganini so'raymiz
   'signin.who.eyebrow': { uz: 'Deyarli tayyor', ru: 'Почти готово', en: 'Almost done' },

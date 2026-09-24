@@ -4,6 +4,8 @@
  *
  * Sayt tomonidagi lug'at: src/data/i18n.ts (bir xil yondashuv).
  */
+import { escapeHtml } from './telegram.ts';
+
 export type Lang = 'uz' | 'ru' | 'en';
 export const LANGS: readonly Lang[] = ['uz', 'ru', 'en'] as const;
 
@@ -63,7 +65,13 @@ const messages = {
 
 export type BotMessageKey = keyof typeof messages;
 
-/** Matn tanlangan tilda; {name} joylari `vars` dan to'ldiriladi. */
+/**
+ * Matn tanlangan tilda; {name} joylari `vars` dan to'ldiriladi.
+ *
+ * Qiymatlar HTML uchun ekranlanadi: xabarlar `parse_mode: 'HTML'` bilan
+ * ketadi, tahlil nomi yoki shifokor ismidagi `<`/`&` butun xabarni
+ * buzmasin. Shablonning o'z teglari (`<b>`) o'zgarmaydi.
+ */
 export function botText(
   key: BotMessageKey,
   lang: Lang = 'uz',
@@ -71,5 +79,8 @@ export function botText(
 ): string {
   const entry = messages[key] as Entry;
   const text = entry[lang] ?? entry.uz;
-  return text.replace(/\{(\w+)\}/g, (_, name: string) => String(vars[name] ?? `{${name}}`));
+  return text.replace(/\{(\w+)\}/g, (_, name: string) => {
+    const value = vars[name];
+    return value === undefined ? `{${name}}` : escapeHtml(String(value));
+  });
 }

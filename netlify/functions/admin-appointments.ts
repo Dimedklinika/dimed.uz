@@ -11,7 +11,7 @@ import {
   type AppointmentStatus,
 } from './lib/appointments.ts';
 import { isDateKey, toTashkent, addDays, type DateKey } from './lib/time.ts';
-import { sendMessage, logToAdmin } from './lib/telegram.ts';
+import { sendMessage, logToAdmin, escapeHtml } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 
 /**
@@ -245,7 +245,7 @@ async function cancel(body: Body): Promise<Response> {
         found.telegram_id,
         `⚠️ <b>Qabul bekor qilindi</b>\n\n` +
           `Sana: ${date}, soat ${time}\n` +
-          `Sabab: ${reason}\n\n` +
+          `Sabab: ${escapeHtml(reason)}\n\n` +
           `Uzr so'raymiz. Boshqa vaqtga yozilish uchun shaxsiy ` +
           `kabinetingizga kiring.`,
       );

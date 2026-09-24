@@ -7,7 +7,7 @@
  * 1C bergan nom yoki ko'rsatkich nomi tarjima qilinmaydi: klinika
  * uni o'z katalogida qanday yozgan bo'lsa, shundayligicha ko'rinadi.
  */
-import { messages, t, type Lang, type MessageKey } from '../data/i18n';
+import { messages, t, type Lang, type MessageKey } from '../data/i18n.ts';
 
 export function resultTitle(
   group: { title: string; titleKey?: string },

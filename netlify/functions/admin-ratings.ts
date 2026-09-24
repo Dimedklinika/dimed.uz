@@ -1,7 +1,7 @@
 import type { Context } from '@netlify/functions';
 import { GetCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
-import { db, TABLES } from './lib/db.ts';
+import { db, TABLES, scanAllPages } from './lib/db.ts';
 import { sessionFrom, isAdmin, ratingOf, type DoctorRecord } from './lib/auth.ts';
 import { adjustDoctorRating, type RatingRow } from './lib/ratings.ts';
 import { maskPhone } from './lib/schedule.ts';
@@ -54,9 +54,9 @@ const toPublic = (r: RatingRow, doctorName: string) => ({
 
 async function list(): Promise<Response> {
   const [ratingRows, doctorRows] = await Promise.all([
-    db
-      .send(new ScanCommand({ TableName: TABLES.ratings }))
-      .then((r) => (r.Items ?? []) as RatingRow[])
+    // Baholar har qabuldan keyin ko'payadi — bitta Scan 1 MB da kesilardi.
+    scanAllPages({ TableName: TABLES.ratings })
+      .then((rows) => rows as RatingRow[])
       // Jadval hali yaratilmagan bo'lsa sahifa bo'sh ro'yxat bilan ochilsin.
       .catch(async (err) => {
         await logToAdmin('admin-ratings/jadval', err);

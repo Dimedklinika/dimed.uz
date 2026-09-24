@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { AWS_REGION, awsCredentials, optional, tableName } from './env.ts';
 
 // Testlarda lokal soxta DynamoDB ishlatiladi.
@@ -30,6 +30,7 @@ export const TABLES = {
   prices: tableName('prices'),
   ratings: tableName('ratings'),
   rateLimits: tableName('rate_limits'),
+  loginSessions: tableName('login_sessions'),
 } as const;
 
 /**
@@ -49,6 +50,30 @@ export async function queryAllPages(
 
   do {
     const page = await db.send(new QueryCommand({ ...input, ExclusiveStartKey: startKey }));
+    items.push(...((page.Items ?? []) as Record<string, unknown>[]));
+    startKey = page.LastEvaluatedKey;
+  } while (startKey && items.length < cap);
+
+  return items;
+}
+
+/**
+ * Scan natijasini oxirigacha o'qiydi — `queryAllPages` ning egizagi.
+ *
+ * Scan ham javobni 1 MB da kesadi. Vaqt o'tishi bilan o'sadigan
+ * jadvallar (bemorlar, baholar, to'lovlar) uchun bitta chaqiruv
+ * yetmaydi: bir kuni natija xabari ba'zi bemorlarga bormay qoladi,
+ * Payme sverkasida tranzaksiyalar yetishmaydi — hech qanday xatosiz.
+ */
+export async function scanAllPages(
+  input: ConstructorParameters<typeof ScanCommand>[0],
+  cap = 50_000,
+): Promise<Record<string, unknown>[]> {
+  const items: Record<string, unknown>[] = [];
+  let startKey: Record<string, unknown> | undefined;
+
+  do {
+    const page = await db.send(new ScanCommand({ ...input, ExclusiveStartKey: startKey }));
     items.push(...((page.Items ?? []) as Record<string, unknown>[]));
     startKey = page.LastEvaluatedKey;
   } while (startKey && items.length < cap);

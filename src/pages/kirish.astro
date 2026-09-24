@@ -25,24 +25,26 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
 
       <ol class="steps">
         <li>
-          <b data-t="signin.page.step1">{uz('signin.page.step1')}</b>
-          <a class="btn btn-sm tg" href={site.telegramBot} target="_blank" rel="noopener">
-            <span data-t="signin.page.botBtn">{uz('signin.page.botBtn')}</span>
+          <b data-t="signin.page.step1new">{uz('signin.page.step1new')}</b>
+          <a class="btn tg getcode" id="getCode" href={site.telegramBot} target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" width="18" height="18"><path d="M21.9 4.3 18.6 19.6c-.24 1.1-.9 1.37-1.82.85l-5.03-3.7-2.43 2.33c-.27.27-.5.5-1 .5l.36-5.1L17.9 6.1c.4-.36-.09-.56-.62-.2L6.63 12.6l-4.98-1.56c-1.08-.34-1.1-1.08.23-1.6L20.5 2.72c.9-.34 1.68.2 1.4 1.58Z"/></svg>
+            <span data-t="signin.page.getCode">{uz('signin.page.getCode')}</span>
           </a>
+          <p class="hint" id="getStatus" role="status" aria-live="polite"></p>
         </li>
         <li>
-          <b data-t="signin.page.step2">{uz('signin.page.step2')}</b>
-          <input
-            id="phone"
-            type="tel"
-            inputmode="tel"
-            autocomplete="tel"
-            placeholder="+998 90 123 45 67"
-            aria-label="Telefon raqami"
-          />
-        </li>
-        <li>
-          <b data-t="signin.page.step3">{uz('signin.page.step3')}</b>
+          <b data-t="signin.page.enterCode">{uz('signin.page.enterCode')}</b>
+          <label class="fld-inline">
+            <span class="fld-lbl" data-t="signin.page.phoneLabel">{uz('signin.page.phoneLabel')}</span>
+            <input
+              id="phone"
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              placeholder="+998 90 123 45 67"
+              aria-label={uz('signin.page.phoneLabel')}
+            />
+          </label>
           <div class="otp-row" id="otpRow">
             {
               [1, 2, 3, 4, 5, 6].map((n) => (
@@ -113,6 +115,7 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
 
 <script>
   import { parsePhone, formatPhone } from '../lib/phone';
+  import { safeNext } from '../lib/safe-next';
   import { birthDateSelectsHtml, readBirthDate } from '../lib/birthdate';
   import { getLang, applyPageLang } from '../lib/lang';
   import { t } from '../data/i18n';
@@ -129,15 +132,6 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
   const setMsg = (text: string, kind: 'error' | 'ok' | '' = '') => {
     msg.textContent = text;
     msg.className = `msg${kind ? ` ${kind}` : ''}`;
-  };
-
-  /**
-   * Kirgandan keyin qaytadigan manzil. Faqat shu saytdagi yo'l
-   * qabul qilinadi — begona saytga yo'naltirishning oldini olamiz.
-   */
-  const safeNext = (): string => {
-    const next = new URLSearchParams(location.search).get('next');
-    return next && next.startsWith('/') && !next.startsWith('//') ? next : '/kabinet';
   };
 
   otpInputs.forEach((input, i) => {
@@ -217,6 +211,90 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
     }
   });
 
+  // ---------- "Kodni olish" (deep-link + poll) ----------
+  /*
+    Bir tugma: botga o'tadi va kod keladi. Bot /start kirish_<nonce> ni
+    ko'rib telefonni kirish sessiyasiga yozadi (netlify auth-start,
+    lib/login.ts); sayt esa nonce'ni poll qilib, raqamni oldindan
+    to'ldiradi va kod maydonini fokuslaydi. Kod (OTP) baribir kiritiladi.
+  */
+  const getCode = document.getElementById('getCode') as HTMLAnchorElement;
+  const getStatus = document.getElementById('getStatus') as HTMLParagraphElement;
+  let pollTimer: ReturnType<typeof setInterval> | undefined;
+  let pollUntil = 0;
+
+  const setGetStatus = (text: string, kind: 'ok' | 'error' | '' = '') => {
+    getStatus.textContent = text;
+    getStatus.className = `hint${kind ? ` ${kind}` : ''}`;
+  };
+
+  const stopPolling = () => {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = undefined;
+  };
+
+  async function pollOnce(nonce: string): Promise<void> {
+    if (Date.now() > pollUntil) {
+      stopPolling();
+      return;
+    }
+    try {
+      const res = await fetch(`/api/auth-start?nonce=${encodeURIComponent(nonce)}`, {
+        credentials: 'same-origin',
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { status: string; phone?: string | null };
+      if (data.status === 'ready') {
+        stopPolling();
+        if (data.phone) phoneInput.value = formatPhone(data.phone);
+        setGetStatus(tr('signin.page.codeSent'), 'ok');
+        const label = getCode.querySelector('span');
+        if (label) label.textContent = tr('signin.page.getCodeAgain');
+        (phoneInput.value ? otpInputs[0] : phoneInput)?.focus();
+      } else if (data.status === 'expired') {
+        stopPolling();
+        setGetStatus(tr('signin.page.expired'), 'error');
+      }
+    } catch {
+      /* tarmoq — keyingi urinishda qayta so'raladi */
+    }
+  }
+
+  getCode.addEventListener('click', async (e) => {
+    /*
+      Popup bloklovchisi ishga tushmasin: bo'sh oynani darhol (foydalanuvchi
+      bosishi ichida) ochamiz, nonce olgach uni Telegramga yo'naltiramiz.
+      Bloklansa — o'sha oynada (fallback: oddiy bot havolasi) ochiladi.
+    */
+    e.preventDefault();
+    const tgWin = window.open('about:blank', '_blank');
+    setGetStatus(tr('signin.page.opening'));
+
+    let deepLink = getCode.href; // fallback: oddiy bot havolasi
+    let nonce: string | null = null;
+    try {
+      const res = await fetch('/api/auth-start', { method: 'POST', credentials: 'same-origin' });
+      if (res.ok) {
+        const data = (await res.json()) as { nonce: string; deepLink: string };
+        nonce = data.nonce;
+        deepLink = data.deepLink;
+      }
+    } catch {
+      /* auth-start ishlamasa — oddiy bot havolasi ochiladi */
+    }
+
+    if (tgWin) tgWin.location.href = deepLink;
+    else window.location.href = deepLink;
+
+    if (nonce) {
+      setGetStatus(tr('signin.page.waiting'));
+      stopPolling();
+      pollUntil = Date.now() + 3.5 * 60 * 1000;
+      const n = nonce;
+      pollTimer = setInterval(() => void pollOnce(n), 2500);
+    }
+  });
+
   // ---------- "Kim kirmoqda?" ----------
 
   type Patient = { id: string; name: string; source: '1c' | 'local' };
@@ -229,7 +307,8 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
     } catch {
       /* bo'sh */
     }
-    window.location.href = safeNext();
+    // Faqat shu saytdagi manzil — begona saytga yo'naltirish yo'q (lib/safe-next).
+    window.location.href = safeNext(new URLSearchParams(location.search).get('next'), location.origin);
   };
 
   /**
@@ -431,6 +510,42 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
   .tg {
     background: var(--color-tg);
     box-shadow: 0 6px 20px -6px rgb(42 171 238 / 0.5);
+  }
+
+  /* "Kodni olish" — asosiy, ko'zga tashlanadigan tugma */
+  .getcode {
+    width: 100%;
+    margin-top: 4px;
+    font-size: 16px;
+  }
+
+  .hint {
+    margin-top: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    min-height: 18px;
+    line-height: 1.45;
+  }
+
+  .hint.ok {
+    color: var(--leaf);
+  }
+
+  .hint.error {
+    color: var(--rose);
+  }
+
+  .fld-inline {
+    display: block;
+    margin-bottom: 12px;
+  }
+
+  .fld-lbl {
+    display: block;
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-bottom: 6px;
   }
 
   #phone {

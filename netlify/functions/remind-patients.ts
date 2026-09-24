@@ -6,7 +6,7 @@ import { getDoctor } from './lib/auth.ts';
 import { doctorDayKey } from './lib/slots.ts';
 import { appointmentsOnDate, isConfirmed, type Appointment } from './lib/appointments.ts';
 import { toTashkent } from './lib/time.ts';
-import { sendMessage, logToAdmin } from './lib/telegram.ts';
+import { sendMessage, logToAdmin, escapeHtml } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 
 /**
@@ -96,7 +96,7 @@ async function remind(appointment: Appointment, doctorName: string): Promise<boo
     await sendMessage(
       appointment.telegram_id,
       `⏰ <b>Qabulingizga bir soat qoldi</b>\n\n` +
-        `Shifokor: ${doctorName}\n` +
+        `Shifokor: ${escapeHtml(doctorName)}\n` +
         `Bugun soat <b>${appointment.time}</b>\n\n` +
         `Iltimos, 10 daqiqa oldin keling. Vaqtni ko'chirish endi mumkin emas — ` +
         `kela olmasangiz qabulxonaga qo'ng'iroq qiling.`,

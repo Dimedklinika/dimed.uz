@@ -85,7 +85,9 @@ export async function logToAdmin(context: string, error: unknown): Promise<void>
   try {
     await callBot(token, 'sendMessage', {
       chat_id: chatId,
-      text: `🚨 <b>${context}</b>\n<pre>${escapeHtml(detail).slice(0, 3500)}</pre>`,
+      // Avval kesiladi, keyin ekranlanadi: aksincha bo'lsa kesish "&amp;"
+      // ni o'rtasidan bo'lib, Telegram butun xabarni rad etardi.
+      text: `🚨 <b>${escapeHtml(context)}</b>\n<pre>${escapeHtml(detail.slice(0, 3500))}</pre>`,
       parse_mode: 'HTML',
     });
   } catch (sendError) {
@@ -93,5 +95,14 @@ export async function logToAdmin(context: string, error: unknown): Promise<void>
   }
 }
 
-const escapeHtml = (s: string): string =>
+/**
+ * Telegram HTML rejimi (`parse_mode: 'HTML'`) uchun matnni ekranlaydi.
+ *
+ * Xabarga qo'yiladigan har bir o'zgaruvchi qiymat (bemor yoki shifokor
+ * ismi, tahlil nomi, sabab matni) shundan o'tishi kerak: `<` yoki `&`
+ * bo'lsa Telegram xabarni butunlay rad etadi ("can't parse entities") va
+ * bemor xabarsiz qoladi; `<a href>` kabi teg esa begona havolani xabar
+ * ichiga yashirib qo'yardi.
+ */
+export const escapeHtml = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
