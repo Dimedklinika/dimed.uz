@@ -476,9 +476,10 @@ await test('xizmati bor shifokorda tanlov chiqadi; tanlangan xizmat narxda va br
   await page.waitForTimeout(400);
   assert.equal(await activeStep(page), 'Tasdiqlash');
 
-  // Qayta ko'rik bepul: narx "Bepul", "kassaga to'laysiz" yo'q, xizmat nomi xulosada.
+  // Qayta ko'rik bepul: narx "Bepul", "kassaga to'laysiz" yo'q, sharti aytiladi, xizmat nomi xulosada.
   assert.match(await page.textContent('.price-big'), /Bepul/);
   assert.doesNotMatch(await page.textContent('.price-note'), /kassasiga/);
+  assert.match(await page.textContent('.price-note'), /oxirgi 10 kun ichida.*qabulxonada tekshiriladi/);
   assert.match(await page.textContent('.sum-card'), /Qayta ko'rik/);
 
   booked = null;
@@ -544,7 +545,8 @@ async function onlineContext() {
       contentType: 'application/json',
       body: JSON.stringify(
         free
-          ? { ok: true, mode: 'at_clinic', appointment: { price: 0, serviceName: "Qayta ko'rik" } }
+          ? // Sayt oldingi qabulni ko'rmadi — bron baribir bo'ldi, qabulxona tekshiradi.
+            { ok: true, mode: 'at_clinic', appointment: { price: 0, serviceName: "Qayta ko'rik", followupVerified: false } }
           : { ok: true, mode: 'online', redirectUrl: base + '/?payme=test' },
       ),
     });
@@ -609,6 +611,8 @@ await test('onlayn to\'lov yoqilgan bo\'lsa ham bepul qayta ko\'rik Payme\'siz t
   await page.waitForTimeout(400);
   assert.equal(booked.serviceId, 'qayta-korik');
   assert.equal(await page.isVisible('.success'), true, 'Payme\'ga o‘tmay, muvaffaqiyat oynasi');
+  // Sayt shartni ko'rmagan: bron bo'ldi, lekin bemorga qabulxonada tekshirilishi aytiladi.
+  assert.match(await page.textContent('.booked-note'), /koʻrinmadi.*oddiy qabul narxi olinadi/);
   await ctx.close();
 });
 

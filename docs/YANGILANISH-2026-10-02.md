@@ -73,6 +73,10 @@ qayta ko'rik va h.k.
   bir joyda: `netlify/functions/lib/appointments.ts`, `followupCheck`. «Faqat onlayn
   yozilganlarga» sharti **qo'yilmadi**: saytda yozilmagan (1C da ro'yxatdan o'tgan) bemorning
   oldingi qabulini sayt ko'rmaydi.
+  **Yangilandi (2026-10-03, ega so'rovi):** shart bajarilmagani ko'rinsa ham qayta ko'rik
+  **rad etilmaydi**. Sayt shartni ko'rmasa navbat `followup_verified: false` bilan yoziladi:
+  bemorga «qabulxonada tekshiriladi, shart bajarilmasa oddiy qabul narxi olinadi» deyiladi,
+  admin va shifokor ro'yxatida xizmat «(qabulxonada tekshirilsin)» bo'lib chiqadi.
 - **1C bilan:** navbat 1C ga o'tganda xizmat kodi bo'yicha «Tovar va xizmat» topiladi
   (`docs/1c-tuzatishlar.md`, 5-band). Onlayn **to'langan** summa 1C da `PrepaidAmount` ga tushadi
   (yangi `paid_amount` maydoni); klinikada to'lanadigan navbatda narxni kassir avvalgidek qo'yadi.

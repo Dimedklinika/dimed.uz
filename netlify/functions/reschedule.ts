@@ -5,7 +5,7 @@ import { db, TABLES } from './lib/db.ts';
 import { sessionFrom, getDoctor } from './lib/auth.ts';
 import { doctorDayKey, isValidSlot, isBookable } from './lib/slots.ts';
 import { shiftsFor } from './lib/schedule.ts';
-import { isConfirmed, followupCheck, followupRejected, type Appointment } from './lib/appointments.ts';
+import { isConfirmed, followupCheck, type Appointment } from './lib/appointments.ts';
 import { isDateKey, isTime, toInstant, weekdayOf } from './lib/time.ts';
 import { sendMessage, logToAdmin, escapeHtml } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
@@ -88,14 +88,16 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     }
 
     /*
-      Qayta ko'rik muddati ko'chirishda ham saqlanadi: yaqin kunga olib,
-      keyin uzoq kunga surib bo'lmaydi. Shifokor xizmatni olib tashlagan
-      bo'lsa (yoki muddatsiz qilgan bo'lsa) tekshirilmaydi — bron kuchda qoladi.
+      Qayta ko'rik sharti yangi kun uchun qayta baholanadi (bron kabi rad
+      etilmaydi): muddatdan tashqari kunga surilsa `followup_verified: false`
+      bo'ladi va qabulxona tekshiradi. Shifokor xizmatni olib tashlagan (yoki
+      muddatsiz qilgan) bo'lsa eski belgi qoladi.
     */
+    let followupVerified = appointment.followup_verified;
     if (appointment.service_followup) {
       const service = doctor.services?.find((s) => s.id === appointment.service_id);
       if (service?.followup_days) {
-        const check = await followupCheck(
+        followupVerified = await followupCheck(
           appointment.phone,
           doctorId,
           appointment.patient_id,
@@ -103,7 +105,6 @@ export default async (request: Request, _context: Context): Promise<Response> =>
           toDate,
           now,
         );
-        if (!check.ok) return error(followupRejected(service.name, service.followup_days, check));
       }
     }
 
@@ -132,6 +133,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
             service_name: appointment.service_name,
             service_code: appointment.service_code,
             service_followup: appointment.service_followup,
+            followup_verified: followupVerified,
             payment_skipped_by: appointment.payment_skipped_by,
             payment_id: appointment.payment_id,
             // Onlayn to'langan summa yangi vaqtga ham ko'chadi (1C PrepaidAmount uchun).

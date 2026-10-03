@@ -4,7 +4,7 @@ import { db, TABLES } from './lib/db.ts';
 import { sessionFrom, doctorFor } from './lib/auth.ts';
 import { slotTimes, type Shift } from './lib/slots.ts';
 import { isDateKey, toTashkent, addDays, weekdayOf } from './lib/time.ts';
-import { dayAppointments, holdsSlot } from './lib/appointments.ts';
+import { dayAppointments, holdsSlot, staffServiceName } from './lib/appointments.ts';
 import {
   checkShifts,
   isAllowedSlotMinutes,
@@ -84,7 +84,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
               patientName: a.patient_name ?? null,
               patientBirthDate: a.patient_birth_date ?? null,
               // Massaj, UZI ... — shifokor bemor nima uchun kelganini oldindan bilsin.
-              serviceName: a.service_name ?? null,
+              serviceName: staffServiceName(a),
             }))
             .sort((a, b) => a.time.localeCompare(b.time)),
         },
