@@ -7,6 +7,7 @@ import { doctorDayKey } from './lib/slots.ts';
 import {
   appointmentsOnDate,
   holdsSlot,
+  staffServiceName,
   type Appointment,
   type AppointmentStatus,
 } from './lib/appointments.ts';
@@ -82,7 +83,7 @@ const toRow = (a: Appointment, names: Map<string, string>, now: Date): Row => ({
   patientName: a.patient_name ?? '',
   phone: a.phone ?? '',
   price: a.price ?? 0,
-  serviceName: a.service_name ?? '',
+  serviceName: staffServiceName(a) ?? '',
   active: holdsSlot(a, now),
   createdAt: a.created_at ?? '',
 });

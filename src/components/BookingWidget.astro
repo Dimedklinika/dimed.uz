@@ -808,8 +808,18 @@ const widgetData = JSON.stringify({ departments, doctors });
 
     // Narx faqat raqam (so'msiz) — "… X soʻm toʻlaysiz" matniga qo'yish uchun.
     const priceNumber = price.toLocaleString('ru-RU').replace(/,/g, ' ');
-    // Bepul xizmatda "kassaga to'laysiz" deyilmaydi.
-    const payNote = price === 0 ? tr('booking.confirm.free') : tr('booking.confirm.payAtDesk', { price: priceNumber });
+    /*
+      Bepul xizmatda "kassaga to'laysiz" deyilmaydi. Bepul qayta ko'rikda sharti
+      aytiladi: sayt oldingi qabulni har doim ham ko'rmaydi (faqat 1C dagi
+      qabul), shuning uchun yozilish ochiq, shartni qabulxona tekshiradi.
+    */
+    const followupDays = price === 0 ? svc.followupDays : null;
+    const payNote =
+      price !== 0
+        ? tr('booking.confirm.payAtDesk', { price: priceNumber })
+        : followupDays
+          ? tr('booking.confirm.followupNote', { n: followupDays })
+          : tr('booking.confirm.free');
     /*
       Onlayn to'lov yoqilgan (server `/api/doctors` da aytadi) va qabul pulli
       bo'lsa, "Tasdiqlash" Payme sahifasiga olib boradi — matn va tugma ham
@@ -823,10 +833,18 @@ const widgetData = JSON.stringify({ departments, doctors });
 
     if (state.booked) {
       const b = state.booked;
+      // Server qayta ko'rik shartini ko'rdimi: ko'rgan — bepul; ko'rmagan — qabulxona tekshiradi.
+      const verified = b.appointment?.followupVerified;
+      const bookedNote =
+        followupDays && verified === false
+          ? tr('booking.success.followupUnverified', { n: followupDays })
+          : followupDays && verified === true
+            ? tr('booking.confirm.free')
+            : payNote;
       wBody.innerHTML = `<div class="success">
         <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg></div>
         <h4>${esc(tr('booking.success.title'))}</h4>
-        <p>${esc(b.mode === 'at_clinic' ? payNote : tr('booking.paid'))}</p>
+        <p class="booked-note">${esc(b.mode === 'at_clinic' ? bookedNote : tr('booking.paid'))}</p>
         <div class="sum-card" style="margin-top:14px;text-align:left">
           ${state.patientName ? `<div class="sum-row"><span class="k">${esc(tr('booking.summary.patient'))}</span><span class="v">${esc(state.patientName)}</span></div>` : ''}
           <div class="sum-row"><span class="k">${esc(tr('booking.summary.doctor'))}</span><span class="v">${esc(d.name)}</span></div>

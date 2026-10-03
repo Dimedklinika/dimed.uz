@@ -5,7 +5,7 @@ import { db, TABLES } from './lib/db.ts';
 import { sessionFrom, getDoctor, isAdmin } from './lib/auth.ts';
 import { doctorDayKey, isValidSlot, isBookable } from './lib/slots.ts';
 import { shiftsFor } from './lib/schedule.ts';
-import { upcomingForPhone, followupCheck, followupRejected } from './lib/appointments.ts';
+import { upcomingForPhone, followupCheck } from './lib/appointments.ts';
 import { resolveService } from './lib/services.ts';
 import { isDateKey, isTime, toInstant, weekdayOf, type DateKey } from './lib/time.ts';
 import { createPayment } from './lib/payment.ts';
@@ -137,13 +137,14 @@ export default async (request: Request, _context: Context): Promise<Response> =>
 
     /*
       Qayta ko'rik: shu shifokorga oddiy qabulga kelgan bemorga, qabuldan
-      keyingi N kun ichida (necha marta bo'lsa ham). Sharti bo'lmasa har kim
-      "bepul qayta ko'rik" ni tanlab olardi (lib/appointments.ts, followupCheck).
+      keyingi N kun ichida (necha marta bo'lsa ham). Sayt faqat o'z
+      navbatlarini ko'radi — qabul faqat 1C da bo'lsa ko'rinmaydi. Shuning
+      uchun rad etilmaydi: shart ko'rinmasa navbat `followup_verified: false`
+      bilan yoziladi, bemorga va xodimlarga "qabulxonada tekshiriladi" deyiladi.
     */
-    if (chosen.followupDays) {
-      const check = await followupCheck(session.phone, doctorId, patient.id, chosen.followupDays, date, now);
-      if (!check.ok) return error(followupRejected(chosen.name, chosen.followupDays, check));
-    }
+    const followupVerified = chosen.followupDays
+      ? await followupCheck(session.phone, doctorId, patient.id, chosen.followupDays, date, now)
+      : undefined;
     const price = chosen.price;
 
     const payment = await createPayment({
@@ -194,6 +195,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
             service_name: chosen.main ? undefined : chosen.name,
             service_code: chosen.code,
             service_followup: chosen.followupDays ? true : undefined,
+            followup_verified: followupVerified,
             payment_id: payment.paymentId,
             // Sinov bron: kim to'lovsiz band qilgani izi qoladi (hisobotda ajratish uchun).
             payment_skipped_by: skipPayment ? session.userId : undefined,
@@ -269,6 +271,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
         price,
         patient.name,
         chosen.main ? undefined : chosen.name,
+        chosen.followupDays && followupVerified === false ? chosen.followupDays : undefined,
       );
     }
 
@@ -285,6 +288,8 @@ export default async (request: Request, _context: Context): Promise<Response> =>
         time,
         price,
         serviceName: chosen.main ? null : chosen.name,
+        // Qayta ko'rikda: sayt shartni ko'rdimi (false — qabulxona tekshiradi); boshqa xizmatda null.
+        followupVerified: followupVerified ?? null,
         patientName: patient.name,
         patientBirthDate: patient.birthDate,
       },
@@ -304,8 +309,16 @@ async function confirmAtClinic(
   price: number,
   patientName?: string,
   serviceName?: string,
+  /** Qayta ko'rik sharti saytda ko'rinmadi — necha kunlik shart (qabulxona tekshiradi). */
+  unverifiedFollowupDays?: number,
 ): Promise<void> {
   const cost = price === 0 ? 'bepul' : `${price.toLocaleString('ru-RU')} so'm`;
+  const payLine = unverifiedFollowupDays
+    ? `Qayta ko'rik sharti qabulxonada tekshiriladi: oxirgi ${unverifiedFollowupDays} kun ichida shu ` +
+      `shifokorga oddiy qabulga kelmagan bo'lsangiz, oddiy qabul narxi olinadi. Iltimos, 10 daqiqa oldin keling.\n`
+    : price === 0
+      ? `Bu xizmat uchun to'lov kerak emas. Iltimos, 10 daqiqa oldin keling.\n`
+      : `Qabulxona kassasiga ${cost} to'laysiz. Iltimos, 10 daqiqa oldin keling.\n`;
   try {
     await sendMessage(
       telegramId,
@@ -315,9 +328,7 @@ async function confirmAtClinic(
         (serviceName ? `Xizmat: ${escapeHtml(serviceName)}\n` : '') +
         `Sana: ${date}, soat ${time}\n` +
         `Narx: ${cost}\n\n` +
-        (price === 0
-          ? `Bu xizmat uchun to'lov kerak emas. Iltimos, 10 daqiqa oldin keling.\n`
-          : `Qabulxona kassasiga ${cost} to'laysiz. Iltimos, 10 daqiqa oldin keling.\n`) +
+        payLine +
         `Vaqtni ko'chirish — shaxsiy kabinetda, qabulgacha 1 soat qolgunicha.`,
     );
   } catch (err) {

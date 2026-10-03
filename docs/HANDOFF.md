@@ -302,7 +302,9 @@ Batafsil: `docs/YANGILANISH-2026-10-02.md`; 1C yamoqlari: `docs/1c-tuzatishlar.m
   `book.ts` (`serviceId`, narx xizmatdan, narx 0 → to'lovsiz), `appointments.followupCheck`
   (qayta ko'rik: shu shifokorga oddiy qabulga kelgan bemorga qabuldan keyin N kun ichida, necha marta
   bo'lsa ham; muddat faqat oddiy qabuldan sanaladi; `reschedule.ts` ham tekshiradi), vidjetda
-  3-qadamda tanlov. 1C: `DynamoSyncBookings.ServiceFor` (`service_code` → `Catalog.GoodsAndServices`).
+  3-qadamda tanlov. **Rad etilmaydi** (ega, 2026-10-03): sayt shartni ko'rmasa navbat
+  `followup_verified: false` bilan yoziladi — bemorga (vidjet, bot) «qabulxonada tekshiriladi»,
+  xodimlarga xizmat nomi «(qabulxonada tekshirilsin)» (`staffServiceName`). 1C: `DynamoSyncBookings.ServiceFor` (`service_code` → `Catalog.GoodsAndServices`).
   Ega aytgan: 10 kun, ko'p marta. Tasdiqlanmagan taxmin: «faqat shu shifokorga» — `YANGILANISH-2026-10-02.md`, 1-band.
 - **Telefon ko'rinishi:** `.wrap` yon bo'shlig'i komponentlarning `padding: A 0 B` qoidalaridan
   himoyalandi (`global.css`, `html .wrap.wrap` — faqat ekranda, ≤1187px); grid ustunlari `minmax(0, …)`;

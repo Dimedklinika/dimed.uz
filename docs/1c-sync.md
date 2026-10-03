@@ -103,6 +103,7 @@ bilan «shu kundagi barcha shifokorlarning navbatlari».
 | `service_name` | S | `Massaj` | Xizmat nomi (bron paytidagi) |
 | `service_code` | S | `00123` | **1C `Catalog.GoodsAndServices` kodi** — admin panelda xizmat qatoriga yozilgan; kod yozilmagan bo'lsa maydon yo'q. 1C `DynamoSyncBookings.ServiceFor` shu bo'yicha xizmatni topadi |
 | `service_followup` | BOOL | `true` | Xizmat «qayta ko'rik» (`qayta:N`) — shu shifokorga oddiy qabulga kelgan bemorga, qabuldan keyin N kun ichida (necha marta bo'lsa ham) |
+| `followup_verified` | BOOL | `false` | Faqat qayta ko'rikda: sayt shartni (oxirgi N kunda shu shifokorga oddiy qabul) ko'rdimi. `false` — ko'rmadi (qabul faqat 1C da bo'lishi mumkin): navbat baribir yozilgan, **shartni qabulxona 1C tarixi bo'yicha tekshiradi**. Admin va shifokor ro'yxatida xizmat nomi «(qabulxonada tekshirilsin)» bilan chiqadi |
 | `payment_skipped_by` | S | `39707325` | Administrator sinov bron uchun to'lovni o'tkazib yuborgan (Telegram ID) |
 | `paid_amount` | N | `70000` | **Onlayn to'langan summa (so'm)** — Payme to'lovni tasdiqlaganda yoziladi; holat keyin `done`/`no_show` ga o'tsa ham qoladi; pul qaytarilsa olib tashlanadi. Klinikada to'lanadigan va bepul navbatda yo'q. 1C `DoctorsAdmission.PrepaidAmount` ni shundan to'ldiradi |
 | `paid_at` | S | ISO | To'lov tasdiqlangan lahza |
