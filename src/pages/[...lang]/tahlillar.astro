@@ -59,7 +59,10 @@ for (const a of analyses) {
               <tbody>
                 {items.map((a) => (
                   <tr data-analysis-row>
-                    <td>{analysisTitle(a.code, a.title, lang)}</td>
+                    <td>
+                      {analysisTitle(a.code, a.title, lang)}
+                      <small class="dur-m">{analysisDuration(a.duration, lang)}</small>
+                    </td>
                     <td class="dur">{analysisDuration(a.duration, lang)}</td>
                     <td class="price" data-price-code={a.code}>{a.price} {h('lab.sum', lang)}</td>
                   </tr>
@@ -124,7 +127,7 @@ for (const a of analyses) {
 
   .count {
     font-family: var(--font-sans);
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 650;
     color: var(--muted);
     background: var(--chip-bg);
@@ -147,7 +150,7 @@ for (const a of analyses) {
 
   th {
     text-align: left;
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 650;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -179,6 +182,45 @@ for (const a of analyses) {
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     font-size: 13px;
+  }
+
+  .dur-m {
+    display: none;
+  }
+
+  /* Telefonda jadval yon tomonga surilmasin: "Tayyor bo'lish" ustuni nomning
+     tagiga ko'chadi, narx doim ko'rinib turadi. */
+  @media (max-width: 600px) {
+    table {
+      min-width: 0;
+    }
+
+    th:nth-child(2),
+    td.dur {
+      display: none;
+    }
+
+    th,
+    td {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+
+    td {
+      padding-top: 12px;
+      padding-bottom: 12px;
+    }
+
+    th:last-child {
+      text-align: right;
+    }
+
+    .dur-m {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
   }
 
   .foot-note {

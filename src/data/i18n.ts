@@ -113,9 +113,15 @@ export const messages = {
     en: 'Waiting for the code… tap “Start” in Telegram.',
   },
   'signin.page.codeSent': {
-    uz: '✓ Kod Telegramga yuborildi. Uni pastdagi maydonga kiriting.',
-    ru: '✓ Код отправлен в Telegram. Введите его в поле ниже.',
-    en: '✓ Code sent to Telegram. Enter it in the field below.',
+    uz: '✓ Kod Telegramga yuborildi. Uni pastdagi maydonga kiriting yoki botdagi «Saytga kirish» tugmasini bosing.',
+    ru: '✓ Код отправлен в Telegram. Введите его ниже или нажмите в боте кнопку «Войти на сайт».',
+    en: '✓ Code sent to Telegram. Enter it below or tap “Sign in to the site” in the bot.',
+  },
+  // Telegramdagi "Saytga kirish" tugmasi orqali kelganda (kodsiz kirish)
+  'signin.page.autoLogin': {
+    uz: 'Telegram havolasi orqali kirilmoqda…',
+    ru: 'Входим по ссылке из Telegram…',
+    en: 'Signing in via the Telegram link…',
   },
   'signin.page.expired': {
     uz: 'Havola eskirdi. «Kodni olish» ni qayta bosing.',
@@ -354,6 +360,27 @@ export const messages = {
     en: 'You will pay {price} UZS at the reception desk',
   },
   'booking.confirm.button': { uz: 'Tasdiqlash', ru: 'Подтвердить', en: 'Confirm' },
+  // Shifokorning qo'shimcha xizmatlari (massaj, UZI, qayta ko'rik) — faqat xizmati bor shifokorda
+  'booking.pickService': { uz: 'Xizmatni tanlang', ru: 'Выберите услугу', en: 'Choose a service' },
+  'booking.service.main': { uz: 'Qabul (konsultatsiya)', ru: 'Приём (консультация)', en: 'Consultation' },
+  'booking.service.free': { uz: 'Bepul', ru: 'Бесплатно', en: 'Free' },
+  'booking.service.followup': {
+    uz: 'qabuldan keyin {n} kun ichida',
+    ru: 'в течение {n} дн. после приёма',
+    en: 'within {n} days after a visit',
+  },
+  'booking.summary.service': { uz: 'Xizmat', ru: 'Услуга', en: 'Service' },
+  'booking.confirm.free': {
+    uz: 'Bu xizmat uchun toʻlov kerak emas',
+    ru: 'Эта услуга бесплатна — оплата не нужна',
+    en: 'This service is free — no payment needed',
+  },
+  // Faqat administratorga ko'rinadi: onlayn to'lovni har safar to'lamasdan sinash.
+  'booking.confirm.adminSkip': {
+    uz: 'Administrator: sinov bron — toʻlovsiz',
+    ru: 'Администратор: тестовая запись — без оплаты',
+    en: 'Admin: test booking — skip payment',
+  },
   'booking.confirm.working': { uz: 'Band qilinmoqda…', ru: 'Бронируем…', en: 'Booking…' },
   'booking.confirm.note': {
     uz: 'Band qilish uchun Telegram orqali kirgan boʻlishingiz kerak. Qabulga 1 soat qolgunicha vaqtni koʻchirish yoki bekor qilish mumkin.',
@@ -467,6 +494,45 @@ export const messages = {
   'panel.generic': { uz: 'Laboratoriya tahlili', ru: 'Лабораторный анализ', en: 'Lab test' },
   'panel.empty': { uz: 'Tahlil natijalari', ru: 'Результаты анализов', en: 'Test results' },
   'result.important': { uz: 'Muhim eslatma', ru: 'Важно', en: 'Important' },
+  // PDF dagi QR kod va hujjatni tekshirish sahifasi (/tekshirish)
+  'result.verify': {
+    uz: 'Hujjat haqiqiyligini tekshirish: QR kodni skanerlang',
+    ru: 'Проверка подлинности документа: отсканируйте QR-код',
+    en: 'Verify the document: scan the QR code',
+  },
+  'verify.title': {
+    uz: 'Hujjatni tekshirish — Dimed klinikasi',
+    ru: 'Проверка документа — клиника Dimed',
+    en: 'Document check — Dimed clinic',
+  },
+  'verify.description': {
+    uz: 'Tahlil natijasi PDF nusxasi haqiqiyligini tekshirish.',
+    ru: 'Проверка подлинности PDF-копии результата анализа.',
+    en: 'Check that a PDF copy of a test result is genuine.',
+  },
+  'verify.heading': { uz: 'Hujjat haqiqiyligi', ru: 'Подлинность документа', en: 'Document authenticity' },
+  'verify.checking': { uz: 'Tekshirilmoqda…', ru: 'Проверяем…', en: 'Checking…' },
+  'verify.valid': { uz: '✓ Hujjat haqiqiy', ru: '✓ Документ подлинный', en: '✓ The document is genuine' },
+  'verify.validText': {
+    uz: 'Bu tahlil natijasi Dimed klinikasi laboratoriyasi tizimida mavjud va bekor qilinmagan. Quyidagi maʼlumotlarni qogʻozdagi nusxa bilan solishtiring.',
+    ru: 'Этот результат анализа есть в системе лаборатории клиники Dimed и не отменён. Сравните данные ниже с бумажной копией.',
+    en: 'This test result exists in the Dimed clinic laboratory system and has not been cancelled. Compare the details below with your copy.',
+  },
+  'verify.invalid': { uz: '✕ Hujjat topilmadi', ru: '✕ Документ не найден', en: '✕ Document not found' },
+  'verify.invalidText': {
+    uz: 'Havola yaroqsiz yoki hujjat bekor qilingan. Bu nusxaga ishonmang — klinikaga murojaat qiling: +998 55 9009 103.',
+    ru: 'Ссылка недействительна или документ отменён. Не доверяйте этой копии — обратитесь в клинику: +998 55 9009 103.',
+    en: 'The link is invalid or the document was cancelled. Do not rely on this copy — contact the clinic: +998 55 9009 103.',
+  },
+  'verify.field.title': { uz: 'Tahlil', ru: 'Анализ', en: 'Test' },
+  'verify.field.date': { uz: 'Sana', ru: 'Дата', en: 'Date' },
+  'verify.field.patient': { uz: 'Bemor', ru: 'Пациент', en: 'Patient' },
+  'verify.field.birth': { uz: 'Tugʻilgan yili', ru: 'Год рождения', en: 'Year of birth' },
+  'verify.privacy': {
+    uz: 'Maxfiylik uchun natija qiymatlari va bemorning toʻliq ismi bu yerda koʻrsatilmaydi.',
+    ru: 'Из соображений конфиденциальности значения результатов и полное имя пациента здесь не показываются.',
+    en: 'For privacy, result values and the full patient name are not shown here.',
+  },
   'result.footer': {
     uz: 'Dimed klinikasi laboratoriyasining elektron hisoboti. Chinoz, Navoiy koʻchasi 18 · +998 55 9009 103',
     ru: 'Электронный отчёт лаборатории клиники Dimed. Чиназ, ул. Навои 18 · +998 55 9009 103',

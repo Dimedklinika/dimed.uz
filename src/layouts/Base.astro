@@ -15,8 +15,19 @@ interface Props {
    * yopiq, indekslanmaydi va tilni brauzerda almashtiradi.
    */
   lang?: Lang;
+  /**
+   * Havola Telegram yoki boshqa messenjerga tashlanganda oldindan ko'rinishda
+   * umumiy muqova rasmi chiqsinmi. Natija sahifasi uchun `false`: u yerda
+   * "Shifokorga navbat" rasmi tahlil natijasiga mos kelmaydi va bemorni adashtiradi.
+   */
+  previewImage?: boolean;
 }
-const { title = site.title, description = site.description, lang } = Astro.props;
+const {
+  title = site.title,
+  description = site.description,
+  lang,
+  previewImage = true,
+} = Astro.props;
 const origin = Astro.site ?? new URL('https://dimed.uz');
 const canonical = new URL(Astro.url.pathname, origin).href;
 
@@ -49,11 +60,19 @@ const ogImage = new URL('/images/og-cover.jpg', origin).href;
     <meta property="og:url" content={canonical} />
     <meta property="og:locale" content={lang ? LOCALE[lang] : 'uz_UZ'} />
     <meta property="og:site_name" content="Dimed" />
-    <meta property="og:image" content={ogImage} />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:image" content={ogImage} />
+    {
+      previewImage ? (
+        <>
+          <meta property="og:image" content={ogImage} />
+          <meta property="og:image:width" content="1200" />
+          <meta property="og:image:height" content="630" />
+          <meta name="twitter:card" content="summary_large_image" />
+          <meta name="twitter:image" content={ogImage} />
+        </>
+      ) : (
+        <meta name="twitter:card" content="summary" />
+      )
+    }
     {
       alternates.map((a) => (
         <link rel="alternate" hreflang={HTML_LANG[a.code]} href={a.href} />

@@ -42,6 +42,18 @@ export function addDays(dateKey: DateKey, days: number): DateKey {
   return `${next.getUTCFullYear()}-${pad(next.getUTCMonth() + 1)}-${pad(next.getUTCDate())}`;
 }
 
+/** Ikki kun orasidagi kalendar kunlari: `to` kechroq bo'lsa musbat (2026-10-02 → 2026-10-12 = 10). */
+export function daysBetween(from: DateKey, to: DateKey): number {
+  const utc = (dateKey: DateKey): number => {
+    const [y, m, d] = dateKey.split('-').map(Number);
+    if (y === undefined || m === undefined || d === undefined) {
+      throw new Error(`Sana formati noto'g'ri: ${dateKey}`);
+    }
+    return Date.UTC(y, m - 1, d);
+  };
+  return Math.round((utc(to) - utc(from)) / 86_400_000);
+}
+
 /** 0 = yakshanba ... 6 = shanba (Toshkent kalendari bo'yicha). */
 export function weekdayOf(dateKey: DateKey): number {
   const [y, m, d] = dateKey.split('-').map(Number);

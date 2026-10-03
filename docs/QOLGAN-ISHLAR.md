@@ -14,7 +14,11 @@
 
 ---
 
-## ⚠️ Avval shuni o'qing
+> **Yangilanish 2026-10-02.** Quyidagi «eski nusxa» ogohlantirishi eskirgan: `dimed.uz` hozir
+> yangi kod bilan ishlayapti (`/api/doctors` javob beradi). Joriy holat, o'zgarishlar va
+> joylash tartibi — `YANGILANISH-2026-10-02.md`; 1C yamoqlari — `1c-tuzatishlar.md`.
+
+## ⚠️ Avval shuni o'qing (2026-09-07 holati — tarixiy)
 
 `dimed.uz` da **eski nusxa** turibdi: sitemap'da atigi 2 ta manzil,
 `/natija` va `/ru/` — 404, API javob bermayapti. Ya'ni bron, kirish,
@@ -29,9 +33,9 @@ Kod tomoni **tayyor**. Bemor navbat oladi, kabinetiga kiradi, tahlil
 natijasini ko'radi; shifokor jadvalini boshqaradi; ega butun klinikani
 admin panelda ko'radi. Sayt o'zbek, rus va ingliz tillarida.
 
-Raqamlar: 22 sahifa, 27 API yo'li, 4 ta cron, **126 ta API + 14 ta
-brauzer tekshiruvi** — hammasi yashil, har deploy'dan oldin CI ishga
-tushiradi.
+Raqamlar (2026-10-02): 24 sahifa, 31 ta Netlify funksiyasi (5 tasi cron),
+**175 ta API + 22 ta brauzer tekshiruvi** — hammasi yashil, har deploy'dan
+oldin CI ishga tushiradi.
 
 Qolgani — **sizning tomoningizda**: kalitlar, sozlamalar va bir necha
 qaror. Ular kodga tegishli emas, lekin ularsiz sayt to'liq ishlamaydi.

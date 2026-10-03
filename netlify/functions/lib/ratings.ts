@@ -10,6 +10,7 @@ import {
   answerCallbackQuery,
   editMessageReplyMarkup,
   logToAdmin,
+  isTransientTelegramError,
   type ReplyMarkup,
 } from './telegram.ts';
 
@@ -99,15 +100,17 @@ export async function askRating(a: Appointment, doctor?: DoctorRecord | null): P
   if (!a.telegram_id || a.rating_asked_at || a.rating !== undefined) return false;
   if (a.status !== 'done' && a.status !== 'paid' && a.status !== 'booked') return false;
 
+  const key = { doctor_day: doctorDayKey(a.doctor_id, a.date), time: a.time };
+  const stamp = new Date().toISOString();
   try {
     await db.send(
       new UpdateCommand({
         TableName: TABLES.appointments,
-        Key: { doctor_day: doctorDayKey(a.doctor_id, a.date), time: a.time },
+        Key: key,
         UpdateExpression: 'SET rating_asked_at = :now',
         ConditionExpression: 'attribute_not_exists(rating_asked_at) AND #s = :was',
         ExpressionAttributeNames: { '#s': 'status' },
-        ExpressionAttributeValues: { ':now': new Date().toISOString(), ':was': a.status },
+        ExpressionAttributeValues: { ':now': stamp, ':was': a.status },
       }),
     );
   } catch (err) {
@@ -115,13 +118,35 @@ export async function askRating(a: Appointment, doctor?: DoctorRecord | null): P
     throw err;
   }
 
-  const doc = doctor === undefined ? await getDoctor(a.doctor_id) : doctor;
-  const lang = await userLang(a.telegram_id);
-  await sendMessage(
-    a.telegram_id,
-    botText('rate.ask', lang, { doctor: doc?.name ?? 'Shifokor', date: fmtDate(a.date), time: a.time }),
-    starsKeyboard(a),
-  );
+  try {
+    const doc = doctor === undefined ? await getDoctor(a.doctor_id) : doctor;
+    const lang = await userLang(a.telegram_id);
+    await sendMessage(
+      a.telegram_id,
+      botText('rate.ask', lang, { doctor: doc?.name ?? 'Shifokor', date: fmtDate(a.date), time: a.time }),
+      starsKeyboard(a),
+    );
+  } catch (err) {
+    /*
+      Xabar yetmadi (bot kaliti yaroqsiz, Telegram band) — belgi qaytariladi,
+      keyingi cron qayta so'raydi. Bemor botni bloklagan bo'lsa belgi
+      qoladi: qayta urinish foydasiz.
+    */
+    if (isTransientTelegramError(err)) {
+      await db
+        .send(
+          new UpdateCommand({
+            TableName: TABLES.appointments,
+            Key: key,
+            UpdateExpression: 'REMOVE rating_asked_at',
+            ConditionExpression: 'rating_asked_at = :now',
+            ExpressionAttributeValues: { ':now': stamp },
+          }),
+        )
+        .catch(() => undefined);
+    }
+    throw err;
+  }
   return true;
 }
 

@@ -83,6 +83,8 @@ export default async (request: Request, _context: Context): Promise<Response> =>
               status: a.status,
               patientName: a.patient_name ?? null,
               patientBirthDate: a.patient_birth_date ?? null,
+              // Massaj, UZI ... — shifokor bemor nima uchun kelganini oldindan bilsin.
+              serviceName: a.service_name ?? null,
             }))
             .sort((a, b) => a.time.localeCompare(b.time)),
         },

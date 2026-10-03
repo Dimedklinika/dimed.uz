@@ -102,8 +102,8 @@ const langLinks = lang ? LANGS.map((code) => ({ code, href: langHref(bare, code)
 </header>
 
 <script>
-  import { t } from '../data/i18n';
-  import { getLang, applyPageLang } from '../lib/lang';
+  import { t, isLang } from '../data/i18n';
+  import { getLang, setLang, applyPageLang } from '../lib/lang';
 
   const header = document.getElementById('siteHeader');
 
@@ -173,6 +173,8 @@ const langLinks = lang ? LANGS.map((code) => ({ code, href: langHref(bare, code)
     phone?: string;
     name?: string;
     lang?: string;
+    /** Til Sozlamalarda tanlanganmi; yo'q bo'lsa `lang` — shunchaki standart. */
+    langSaved?: boolean;
   };
 
   /*
@@ -295,8 +297,34 @@ const langLinks = lang ? LANGS.map((code) => ({ code, href: langHref(bare, code)
     });
   }
 
+  /*
+    Kirgan bemorning tili serverda saqlanadi (Sozlamalar → Til), brauzerda esa
+    `dimed_lang` — ikkalasi farq qilishi mumkin (boshqa qurilma, eski `?lang=`).
+    Avval header eski tilda qolib ketardi: Sozlamalarda "O'zbekcha" tanlangan,
+    menyu esa inglizcha. Kabinetda tilni faqat Sozlamalar o'zgartiradi,
+    shuning uchun serverniki ustun: til tenglashtiriladi va sahifa bir marta
+    qayta yuklanadi — qolgan matnlar ham to'g'ri tilda chizilsin.
+    Ommaviy sahifa (manzildagi til) va aniq `?lang=` tegilmaydi.
+  */
+  function syncLangWithAccount(info: SessionInfo): boolean {
+    if (!header || header.dataset.navLang) return false;
+    if (new URLSearchParams(location.search).has('lang')) return false;
+    // Til hech qachon tanlanmagan bo'lsa serverda faqat standart uz bor — bemor
+    // saytda ruscha/inglizcha tanlagan bo'lsa, uni o'zbekchaga qaytarib yubormaymiz.
+    if (!info.langSaved || !isLang(info.lang) || info.lang === getLang()) return false;
+
+    setLang(info.lang);
+    // Xotira yopiq bo'lsa (maxfiy rejim) til saqlanmaydi — qayta yuklash cheksiz aylanib qolmasin.
+    if (getLang() !== info.lang) return false;
+    applyPageLang(info.lang, header);
+    location.reload();
+    return true;
+  }
+
   loadSession().then((info) => {
-    if (info && info.role !== 'guest') renderAccount(info);
+    if (!info || info.role === 'guest') return;
+    if (syncLangWithAccount(info)) return;
+    renderAccount(info);
   });
 </script>
 
@@ -417,7 +445,7 @@ const langLinks = lang ? LANGS.map((code) => ({ code, href: langHref(bare, code)
     color: #fff;
     font-family: var(--font-display);
     font-weight: 800;
-    font-size: 11px;
+    font-size: 12px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -486,7 +514,7 @@ const langLinks = lang ? LANGS.map((code) => ({ code, href: langHref(bare, code)
 
   .acct-menu :global(.acct-lab) {
     padding: 8px 16px 4px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;

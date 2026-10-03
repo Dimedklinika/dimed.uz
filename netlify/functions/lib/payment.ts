@@ -35,10 +35,16 @@ export async function createPayment(input: {
   amount: number;
   appointmentKey: string;
   phone: string;
+  /**
+   * Faqat administrator sinov uchun: onlayn to'lov yoqilgan bo'lsa ham
+   * Payme'ga o'tmasdan bron darhol kuchga kiradi (`at_clinic` rejimi).
+   * Chaqiruvchi ruxsatni o'zi tekshiradi (book.ts — `isAdmin`).
+   */
+  skipOnline?: boolean;
 }): Promise<PaymentIntent> {
   const paymentId = randomUUID();
 
-  if (paymentMode() === 'at_clinic') {
+  if (input.skipOnline || paymentMode() === 'at_clinic') {
     return { paymentId, mode: 'at_clinic' };
   }
 

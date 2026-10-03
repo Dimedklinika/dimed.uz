@@ -5,6 +5,8 @@ import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { db, TABLES } from './lib/db.ts';
 import { required } from './lib/env.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
+import { botText, isLang, langFromTelegram, type Lang } from './lib/i18n.ts';
+import { siteOrigin } from './lib/site.ts';
 import { generateOtp } from './lib/session.ts';
 import { mergeIndividualProfile } from './lib/patients.ts';
 import { handleRatingCallback, handleRatingComment, type CallbackQuery } from './lib/ratings.ts';
@@ -93,7 +95,12 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       */
       const fromId = message.from?.id ?? message.chat.id;
       if (message.contact.user_id === fromId) {
-        await handleContact(message.chat.id, message.contact);
+        await handleContact(
+          message.chat.id,
+          message.contact,
+          langFromTelegram(message.from?.language_code),
+          siteOrigin(request),
+        );
       } else {
         await sendMessage(
           message.chat.id,
@@ -119,7 +126,11 @@ export default async (request: Request, _context: Context): Promise<Response> =>
           Key: { telegram_id: String(message.chat.id) },
         }),
       );
-      const user = existing.Item as { phone?: string; contact_verified_at?: string } | undefined;
+      const user = existing.Item as
+        | { phone?: string; contact_verified_at?: string; lang?: string }
+        | undefined;
+      const savedLang = user?.lang;
+      const lang: Lang = isLang(savedLang) ? savedLang : langFromTelegram(message.from?.language_code);
       /*
         Saqlangan telefon faqat qat'iy tekshiruvdan o'tgan kontaktdan
         olingan bo'lsa ishlatiladi (`contact_verified_at`). Oldingi
@@ -131,7 +142,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
 
       if (phone) {
         if (nonce) await markLoginReady(nonce, phone, String(message.chat.id));
-        await sendOtp(message.chat.id, phone);
+        await sendOtp(message.chat.id, phone, lang, siteOrigin(request));
       } else {
         // Telefon hali yo'q: nonce'ni eslab qolamiz — kontakt kelgach
         // shu kirish sessiyasi "ready" bo'ladi.
@@ -161,8 +172,20 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     } else if (message.text === '/help') {
       await sendMessage(
         message.chat.id,
-        'Buyruqlar:\n/start — kirish kodini olish\n\n' +
+        'Buyruqlar:\n/start — kirish kodini olish\n/id — Telegram ID raqamingiz\n\n' +
           'Savollar uchun: +998 55 9009 103',
+      );
+    } else if (/^\/id(?:@\w+)?$/.test((message.text ?? '').trim())) {
+      /*
+        Administrator (`ADMIN_TELEGRAM_IDS`) yoki shifokor (`link-doctor`) qilib
+        qo'shish uchun Telegram ID kerak — odam uni qidirib o'tirmasdan botdan
+        o'zi oladi va egaga yuboradi. Faqat o'zining ID si ko'rsatiladi.
+      */
+      await sendMessage(
+        message.chat.id,
+        botText('id.reply', langFromTelegram(message.from?.language_code), {
+          id: message.from?.id ?? message.chat.id,
+        }),
       );
     } else if (message.text && !message.text.startsWith('/')) {
       // Baho qo'yilgach yozilgan matn — o'sha bahoga izoh (G2).
@@ -203,6 +226,8 @@ function uzPhoneFromContact(raw: string): string | null {
 async function handleContact(
   chatId: number,
   contact: NonNullable<NonNullable<TelegramUpdate['message']>['contact']>,
+  fallbackLang: Lang,
+  origin: string,
 ): Promise<void> {
   const phone = uzPhoneFromContact(contact.phone_number);
   if (!phone) {
@@ -278,7 +303,9 @@ async function handleContact(
     Kirish sessiyasini "ready" qilamiz — sayt poll qilib kod maydonini
     ochadi. Eskirgan nonce (10 daqiqadan oshgan) e'tiborga olinmaydi.
   */
-  const old = updated.Attributes as { pending_login_nonce?: string; pending_login_at?: number } | undefined;
+  const old = updated.Attributes as
+    | { pending_login_nonce?: string; pending_login_at?: number; lang?: string }
+    | undefined;
   const pendingNonce = old?.pending_login_nonce;
   const pendingAt = Number(old?.pending_login_at ?? 0);
   if (pendingNonce && Math.floor(Date.now() / 1000) - pendingAt < LOGIN_TTL_SECONDS) {
@@ -294,11 +321,23 @@ async function handleContact(
     logToAdmin('telegram-webhook/1c-profil', err),
   );
 
-  await sendOtp(chatId, phone);
+  const savedLang = old?.lang;
+  await sendOtp(chatId, phone, isLang(savedLang) ? savedLang : fallbackLang, origin);
 }
 
-/** Yangi kirish kodi yasab yuboradi. */
-async function sendOtp(chatId: number, phone: string): Promise<void> {
+/**
+ * Yangi kirish kodi yasab yuboradi.
+ *
+ * Xabar ostida ikki tugma: "Saytga kirish" — kodni yozmasdan kiradi,
+ * "Kodni nusxalash" — bir bosishda nusxalaydi.
+ *
+ * Kirish havolasi telefon va kodni `#` dan keyin olib yuradi: bu qism
+ * serverga yuborilmaydi (jurnalga va referer'ga tushmaydi). Kirish sahifasi
+ * uni o'qib tasdiqlaydi va manzildan olib tashlaydi. Kod baribir bir
+ * martalik va 5 daqiqa amal qiladi — havola ham shunday: ulashilsa ham
+ * ishlatilgach yaroqsiz.
+ */
+async function sendOtp(chatId: number, phone: string, lang: Lang, origin: string): Promise<void> {
   const code = generateOtp();
   await db.send(
     new PutCommand({
@@ -313,11 +352,14 @@ async function sendOtp(chatId: number, phone: string): Promise<void> {
     }),
   );
 
+  const digits = phone.replace(/\D/g, '');
+  const link = `${origin}/kirish#p=${digits}&c=${code}`;
+
   // <code> — Telegram'da bosilsa nusxalanadi.
-  await sendMessage(
-    chatId,
-    `Saytga kirish kodingiz:\n\n<code>${code}</code>\n\n` +
-      'Kod ustiga bossangiz — nusxalanadi. 5 daqiqa amal qiladi, hech kimga bermang.',
-    { remove_keyboard: true },
-  );
+  await sendMessage(chatId, botText('login.code', lang, { code }), {
+    inline_keyboard: [
+      [{ text: botText('login.btn.open', lang), url: link }],
+      [{ text: botText('login.btn.copy', lang), copy_text: { text: code } }],
+    ],
+  });
 }

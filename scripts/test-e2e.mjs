@@ -86,7 +86,13 @@ async function walkToPatientStep(page) {
 const activeStep = (page) => page.$eval('#wSteps .step-pill.on .lbl', (e) => e.textContent.trim());
 
 // --- serverni ko'tarish ---
-const server = spawn('npx', ['astro', 'preview', '--host', '127.0.0.1', '--port', String(PORT)], {
+/*
+  `npx` ni to'g'ridan-to'g'ri ishga tushirish Windows'da ishlamaydi (npx.cmd
+  kerak) — shuning uchun astro CLI'ni node orqali chaqiramiz: bu hamma
+  tizimda bir xil ishlaydi va to'xtatilganda bola jarayon ham o'chadi.
+*/
+const astroCli = new URL('../node_modules/astro/astro.js', import.meta.url).pathname.replace(/^\/(\w:)/, '$1');
+const server = spawn(process.execPath, [astroCli, 'preview', '--host', '127.0.0.1', '--port', String(PORT)], {
   stdio: 'ignore',
 });
 const stop = () => {
@@ -340,6 +346,215 @@ await test('bosh sahifada klinika razmetkasi va suratlar bor', async () => {
     alts.every((a) => a.length > 5),
     `har bir suratda alt bo‘lishi kerak, keldi: ${JSON.stringify(alts)}`,
   );
+  await ctx.close();
+});
+
+console.log('\nKirish havolasi va natija sahifasi:');
+
+await test('botdagi "Saytga kirish" havolasi kodni o‘zi tasdiqlaydi va manzildan olib tashlaydi', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 900 }, isMobile: true });
+  await mockApi(ctx, { signedIn: true });
+  let verified = null;
+  await ctx.route('**/api/auth-verify', (route) => {
+    verified = JSON.parse(route.request().postData() ?? '{}');
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  });
+  const page = await ctx.newPage();
+  const jsErrors = [];
+  page.on('pageerror', (e) => jsErrors.push(e.message));
+
+  await page.goto(`${base}/kirish#p=998901234567&c=123456`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(500);
+
+  assert.deepEqual(verified, { phone: '+998901234567', code: '123456' });
+  assert.equal(new URL(page.url()).hash, '', 'kod manzilda (tarixda) qolmasligi kerak');
+  assert.equal(await page.isVisible('#whoCard'), true, 'kirgach "kim kirmoqda?" ochiladi');
+  assert.deepEqual(jsErrors, [], 'sahifada JS xatosi bo‘lmasin');
+  await ctx.close();
+});
+
+await test('buzuq kirish havolasi hech narsa yubormaydi, oddiy kirish oynasi qoladi', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: false });
+  let verified = false;
+  await ctx.route('**/api/auth-verify', (route) => {
+    verified = true;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  });
+  const page = await ctx.newPage();
+  await page.goto(`${base}/kirish#p=12&c=abc`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(300);
+
+  assert.equal(verified, false, 'noto‘g‘ri havola so‘rov yubormasligi kerak');
+  assert.equal(await page.inputValue('#phone'), '', 'maydonlar to‘ldirilmaydi');
+  assert.equal(new URL(page.url()).hash, '');
+  await ctx.close();
+});
+
+const sampleResult = (doctor) => ({
+  result: {
+    id: 'doc-1', title: 'Umumiy qon tahlili', titleKey: 'panel.cbc', date: '2026-08-21T14:30:00',
+    patientName: 'Yoʻldoshev Anvar', patientBirthDate: '1990-04-25', patientGender: 'male',
+    doctor, biomaterial: 'Qon', sampleId: 'A-1', status: 'ready', seen: false,
+    verifyUrl: `${base}/tekshirish?v=ok`,
+    items: [
+      { id: '1', code: '96', title: 'Gemoglobin', value: '132', unit: 'g/L', reference: '120 — 160', refLow: 120, refHigh: 160, status: 'normal', description: null },
+      { id: '2', code: '5', title: 'Oqsil', value: 'manfiy', unit: 'g/L', reference: null, refLow: null, refHigh: null, status: null, description: null },
+    ],
+  },
+  shared: false,
+});
+
+for (const [doctor, shown] of [[null, false], ['Ashurov T.', true]]) {
+  await test(`natija sahifasi: yuborgan shifokor ${shown ? 'bor — ko‘rinadi' : 'yo‘q — katak chiqmaydi'}`, async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    await mockApi(ctx, { signedIn: true });
+    await ctx.route('**/api/result**', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(sampleResult(doctor)) }),
+    );
+    const page = await ctx.newPage();
+    const jsErrors = [];
+    page.on('pageerror', (e) => jsErrors.push(e.message));
+    await page.goto(`${base}/natija?id=doc-1`, { waitUntil: 'networkidle' });
+    await page.waitForSelector('#sheet:not([hidden])');
+
+    assert.equal(await page.isVisible('#cellDoctor'), shown);
+    assert.equal(await page.$eval('#cellSample', (c) => c.colSpan), shown ? 1 : 2, 'namuna katagi qatorni egallaydi');
+
+    // Birlik faqat sonli qiymatga: "manfiy g/L" chiqmasin.
+    const values = await page.$$eval('#rows tr', (rows) => rows.map((r) => r.children[1].textContent.trim()));
+    assert.deepEqual(values, ['132 g/L', 'manfiy']);
+
+    // Havola messenjerga tashlanganda bosh sahifa rasmi chiqmasin.
+    assert.equal(await page.$('meta[property="og:image"]'), null, 'natija sahifasida og:image yo‘q');
+    assert.deepEqual(jsErrors, []);
+    await ctx.close();
+  });
+}
+
+console.log('\nQo\'shimcha xizmatlar (vidjet):');
+
+const withServices = [
+  {
+    ...doctors[0],
+    services: [
+      { id: 'massaj', name: 'Massaj', price: 50000, followupDays: null },
+      { id: 'qayta-korik', name: "Qayta ko'rik", price: 0, followupDays: 10 },
+    ],
+  },
+];
+
+await test('xizmati bor shifokorda tanlov chiqadi; tanlangan xizmat narxda va bron so\'rovida', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 900 }, isMobile: true });
+  await mockApi(ctx, { signedIn: true });
+  await ctx.route('**/api/doctors', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(withServices) }),
+  );
+  const page = await ctx.newPage();
+  const jsErrors = [];
+  page.on('pageerror', (e) => jsErrors.push(e.message));
+
+  await page.goto(base + '/', { waitUntil: 'networkidle' });
+  await page.addStyleTag({ content: 'html{scroll-behavior:auto !important}' });
+  await page.waitForTimeout(400);
+  await page.click('.dept-btn[data-id="terapiya"]');
+  await page.click('.doc-btn');
+  await page.waitForTimeout(300);
+
+  // Asosiy qabul + ikkita qo'shimcha xizmat; boshida asosiysi tanlangan.
+  assert.equal(await page.$$eval('.svc-pill', (p) => p.length), 3);
+  assert.equal(await page.$eval('.svc-pill.on', (p) => p.dataset.s), 'main');
+  await page.click('.svc-pill[data-s="qayta-korik"]');
+  assert.equal(await page.$eval('.svc-pill.on', (p) => p.dataset.s), 'qayta-korik');
+
+  await page.click('.slot-btn:not(.busy)');
+  await page.waitForTimeout(400);
+  await page.$eval('#privacyOk', (b) => {
+    if (!b.checked) b.click();
+  });
+  await page.click('[data-pick="A1"]');
+  await page.waitForTimeout(400);
+  assert.equal(await activeStep(page), 'Tasdiqlash');
+
+  // Qayta ko'rik bepul: narx "Bepul", "kassaga to'laysiz" yo'q, xizmat nomi xulosada.
+  assert.match(await page.textContent('.price-big'), /Bepul/);
+  assert.doesNotMatch(await page.textContent('.price-note'), /kassasiga/);
+  assert.match(await page.textContent('.sum-card'), /Qayta ko'rik/);
+
+  booked = null;
+  await page.click('#wBook');
+  await page.waitForTimeout(400);
+  assert.ok(booked, 'bron so‘rovi ketishi kerak');
+  assert.equal(booked.serviceId, 'qayta-korik');
+  assert.deepEqual(jsErrors, [], 'sahifada JS xatosi bo‘lmasin');
+  await ctx.close();
+});
+
+await test('xizmat tanlanmasa asosiy qabul: serviceId yuborilmaydi, narx shifokornikidek', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: true });
+  await ctx.route('**/api/doctors', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(withServices) }),
+  );
+  const page = await ctx.newPage();
+  await page.goto(base + '/', { waitUntil: 'networkidle' });
+  await page.addStyleTag({ content: 'html{scroll-behavior:auto !important}' });
+  await page.waitForTimeout(400);
+  await page.click('.dept-btn[data-id="terapiya"]');
+  await page.click('.doc-btn');
+  await page.waitForTimeout(300);
+  await page.click('.slot-btn:not(.busy)');
+  await page.waitForTimeout(400);
+  await page.$eval('#privacyOk', (b) => {
+    if (!b.checked) b.click();
+  });
+  await page.click('[data-pick="A1"]');
+  await page.waitForTimeout(400);
+
+  assert.match(await page.textContent('.price-big'), /70\s000/);
+  booked = null;
+  await page.click('#wBook');
+  await page.waitForTimeout(400);
+  assert.ok(booked);
+  assert.equal(booked.serviceId, undefined, 'asosiy qabulda xizmat kaliti yuborilmaydi');
+  await ctx.close();
+});
+
+await test('xizmati yo\'q shifokorda tanlov umuman chiqmaydi (avvalgidek)', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: false });
+  const page = await ctx.newPage();
+  await page.goto(base + '/', { waitUntil: 'networkidle' });
+  await page.addStyleTag({ content: 'html{scroll-behavior:auto !important}' });
+  await page.waitForTimeout(400);
+  await page.click('.dept-btn[data-id="terapiya"]');
+  await page.click('.doc-btn');
+  await page.waitForTimeout(300);
+  assert.equal(await page.$$eval('.svc-pill', (p) => p.length), 0);
+  assert.equal(await page.isVisible('.slot-btn'), true, 'vaqt tanlash avvalgidek');
+  await ctx.close();
+});
+
+console.log('\nTelefon ko\'rinishi (360px):');
+
+await test('sahifalar ekran chetiga yopishmaydi va yonga surilmaydi', async () => {
+  // Komponentlardagi `padding: A 0 B` `.wrap` ning yon bo'shlig'ini nolga
+  // tushirib qo'yardi; ustunlar ham vidjet tufayli ekrandan chiqib ketardi.
+  const ctx = await browser.newContext({ viewport: { width: 360, height: 800 }, isMobile: true });
+  await mockApi(ctx, { signedIn: false });
+  for (const path of ['/', '/ru/', '/en/', '/kirish', '/tahlillar', '/maxfiylik']) {
+    const page = await ctx.newPage();
+    await page.goto(base + path, { waitUntil: 'networkidle' });
+    const m = await page.evaluate(() => ({
+      pads: [...document.querySelectorAll('.wrap')].map((el) => parseFloat(getComputedStyle(el).paddingLeft)),
+      overflow: document.documentElement.scrollWidth - innerWidth,
+      price: [...document.querySelectorAll('td.price')].map((el) => el.getBoundingClientRect().right),
+    }));
+    assert.ok(m.pads.length > 0 && m.pads.every((p) => p >= 12), `${path}: yon bo'shliq yo'q (${m.pads})`);
+    assert.ok(m.overflow <= 0, `${path}: sahifa ${m.overflow}px yonga surilyapti`);
+    assert.ok(m.price.every((r) => r <= 360), `${path}: narx ustuni ekrandan tashqarida`);
+    await page.close();
+  }
   await ctx.close();
 });
 

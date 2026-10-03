@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const libDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'netlify', 'functions', 'lib');
 const load = (file) => import(pathToFileURL(join(libDir, file)).href);
 
-const { toTashkent, toInstant, addDays, weekdayOf } = await load('time.ts');
+const { toTashkent, toInstant, addDays, daysBetween, weekdayOf } = await load('time.ts');
 const { slotTimes, availability, isBookable, isValidSlot, doctorDayKey, toMinutes, toHHMM } =
   await load('slots.ts');
 
@@ -55,6 +55,14 @@ test('addDays oy va yil chegarasidan o\'tadi', () => {
   assert.equal(addDays('2026-08-31', 1), '2026-09-01');
   assert.equal(addDays('2026-12-31', 1), '2027-01-01');
   assert.equal(addDays('2026-03-01', -1), '2026-02-28');
+});
+
+test('daysBetween kalendar kunlarini sanaydi (oy/yil chegarasi, ishorasi)', () => {
+  assert.equal(daysBetween('2026-10-02', '2026-10-12'), 10);
+  assert.equal(daysBetween('2026-10-02', '2026-10-02'), 0);
+  assert.equal(daysBetween('2026-12-28', '2027-01-03'), 6);
+  assert.equal(daysBetween('2026-10-12', '2026-10-02'), -10);
+  assert.equal(daysBetween('2026-02-27', '2026-03-01'), 2);
 });
 
 test('weekdayOf to\'g\'ri kun qaytaradi', () => {

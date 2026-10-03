@@ -70,11 +70,11 @@ import { LANGS, LANG_NAMES } from '../../data/i18n';
 <script>
   import { showSignIn } from '../../lib/signin';
   import { birthDateSelectsHtml, readBirthDate, formatBirthDate } from '../../lib/birthdate';
-  import { getLang, setLang, applyLang } from '../../lib/lang';
+  import { getLang, setLang, applyLang, applyPageLang } from '../../lib/lang';
   import { isLang } from '../../data/i18n';
 
   type Patient = { id: string; name: string; source: '1c' | 'local'; birthDate: string | null };
-  type SessionInfo = { role: string; name?: string; phone?: string; lang?: string };
+  type SessionInfo = { role: string; name?: string; phone?: string; lang?: string; langSaved?: boolean };
 
   const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   const esc = (s: string) =>
@@ -108,6 +108,9 @@ import { LANGS, LANG_NAMES } from '../../data/i18n';
           lang = picked;
           setLang(picked);
           applyLang(picked, el('langSeg'));
+          // Header menyusi ham darhol yangi tilda bo'lsin.
+          const header = document.getElementById('siteHeader');
+          if (header) applyPageLang(picked, header);
           setMsg('langMsg', 'Saqlanmoqda…');
           try {
             const res = await post('/api/settings', { lang: picked });
@@ -238,11 +241,18 @@ import { LANGS, LANG_NAMES } from '../../data/i18n';
 
     el('accName').textContent = info.name || '—';
     el('accPhone').textContent = info.phone ?? '—';
-    // Serverda saqlangan til brauzerdagidan farq qilsa, serverniki ustun.
-    if (isLang(info.lang) && info.lang !== lang) {
+    /*
+      Serverda tanlab saqlangan til brauzerdagidan farq qilsa, serverniki ustun.
+      Tanlanmagan bo'lsa (`langSaved` yo'q) server faqat standart uz beradi —
+      bemorning brauzerdagi tanlovi o'zgarmaydi. Header ham yangi tilga
+      o'tkaziladi: avval Sozlamalarda "O'zbekcha", menyu esa inglizcha qolardi.
+    */
+    if (info.langSaved && isLang(info.lang) && info.lang !== lang) {
       lang = info.lang;
       setLang(info.lang);
       el('w-birth').innerHTML = birthDateSelectsHtml('new', lang);
+      const header = document.getElementById('siteHeader');
+      if (header) applyPageLang(lang, header);
     }
     bindLang();
 
@@ -423,7 +433,7 @@ import { LANGS, LANG_NAMES } from '../../data/i18n';
   }
 
   .who-list :global(.who-tag) {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     color: var(--ok);
     background: var(--ok-bg);

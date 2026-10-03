@@ -174,6 +174,18 @@ header {
   padding: 0 var(--wrap-pad);
 }
 
+/* Komponentlar `padding: A 0 B` yozadi (scoped — o'ziga xosligi `.wrap` dan
+   yuqori) va yon bo'shliqni nolga tushiradi: telefonda matn ekran chetiga
+   yopishib qolardi. Gorizontal o'qni alohida, yuqoriroq o'ziga xoslik bilan
+   qaytaramiz. 1188px dan keng ekranda konteyner markazlanadi — o'zgarmaydi;
+   chop etishga (print) tegmaymiz. */
+@media screen and (max-width: 1187px) {
+  html .wrap.wrap {
+    padding-left: var(--wrap-pad);
+    padding-right: var(--wrap-pad);
+  }
+}
+
 .glass {
   background: var(--card);
   backdrop-filter: blur(18px) saturate(1.5);

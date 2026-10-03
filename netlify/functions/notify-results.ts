@@ -7,7 +7,8 @@ import { shareUrl } from './result.ts';
 import { appointmentsOnDate } from './lib/appointments.ts';
 import { toTashkent, addDays } from './lib/time.ts';
 import { botText, isLang, type Lang } from './lib/i18n.ts';
-import { sendMessage, logToAdmin } from './lib/telegram.ts';
+import { sendMessage, logToAdmin, isTransientTelegramError } from './lib/telegram.ts';
+import { cronGuard } from './lib/cron.ts';
 import { json, error } from './lib/http.ts';
 
 /**
@@ -20,10 +21,19 @@ import { json, error } from './lib/http.ts';
  *
  * Takror yubormaslik: xabar berilgan hujjatlar bemor yozuvida
  * `results_notified` ro'yxatida turadi (1C jadvaliga sayt yozmaydi).
- * Birinchi ishga tushishda (ro'yxat hali yo'q) mavjud tarix xabarsiz
- * belgilab qo'yiladi — aks holda hamma eski natija "yangi" bo'lardi.
+ * Birinchi marta ko'rilayotgan bemorning (ro'yxat hali yo'q) eski tarixi
+ * xabarsiz belgilab qo'yiladi — aks holda hamma eski natija "yangi"
+ * bo'lardi. Faqat `NEW_PATIENT_DAYS` kundan yangi natija haqida xabar
+ * beriladi: bemor laboratoriyaga kelib, natija chiqqandan keyin botga
+ * kirsa, natijasini ko'rishi uchun.
+ *
+ * Xabar vaqtinchalik sababga ko'ra yetmasa (bot kaliti yaroqsiz, Telegram
+ * band) "xabar berilgan" belgisi qaytariladi — natija keyingi aylanishda
+ * yana yuboriladi.
  */
 const NOTIFIED_CAP = 500;
+/** Yangi bemor uchun shuncha kundan yangi natijalar haqida xabar beriladi. */
+const NEW_PATIENT_DAYS = 3;
 /** Bir ishga tushishda bitta bemorga ko'pi bilan shuncha alohida xabar. */
 const MAX_SEPARATE = 3;
 
@@ -69,6 +79,9 @@ async function activePatients(now: Date): Promise<Set<string>> {
 }
 
 export default async (request: Request, _context: Context): Promise<Response> => {
+  const blocked = await cronGuard(request, 'notify-results', 450);
+  if (blocked) return blocked;
+
   try {
     const now = new Date();
     /*
@@ -136,46 +149,94 @@ async function notifyUser(
   const groups = await loadResults(phone, references);
   // Faqat tayyor natijalar: bo'sh (kutilayotgan) hujjat keyin to'lganda xabar oladi.
   const ready = groups.filter((g) => g.status === 'ready');
-  const known = new Set(user.results_notified ?? []);
 
-  // Birinchi marta: tarixni jimgina belgilaymiz.
-  if (!user.results_notified) {
-    await remember(user.telegram_id, ready.map((g) => g.id));
+  /*
+    `baseline` — xabarsiz "berilgan" deb belgilanadigan hujjatlar,
+    `fresh` — haqida xabar yuboriladiganlar.
+    Birinchi marta ko'rilayotgan bemorda eski tarix jimgina belgilanadi,
+    so'nggi kunlardagisi haqida xabar ketadi.
+  */
+  const firstTime = !user.results_notified;
+  let fresh: typeof ready;
+  let baseline: string[];
+  if (firstTime) {
+    const since = addDays(toTashkent(new Date()).dateKey, -NEW_PATIENT_DAYS);
+    fresh = ready.filter((g) => g.date.slice(0, 10) >= since);
+    baseline = ready.filter((g) => !fresh.includes(g)).map((g) => g.id);
+  } else {
+    const known = new Set(user.results_notified);
+    fresh = ready.filter((g) => !known.has(g.id));
+    baseline = [...known];
+  }
+
+  if (!fresh.length) {
+    if (firstTime) await remember(user.telegram_id, baseline);
     return 0;
   }
 
-  const fresh = ready.filter((g) => !known.has(g.id));
-  if (!fresh.length) return 0;
-
   // Avval belgilaymiz, keyin yuboramiz — ikki marta xabar ketmasin.
-  await remember(user.telegram_id, [...known, ...fresh.map((g) => g.id)]);
+  await remember(user.telegram_id, [...baseline, ...fresh.map((g) => g.id)]);
 
   const lang: Lang = isLang(user.lang) ? user.lang : 'uz';
-  let sent = 0;
+  const delivered: string[] = [];
 
-  if (fresh.length > MAX_SEPARATE) {
-    await sendMessage(
-      user.telegram_id,
-      botText('result.ready.many', lang, {
-        n: fresh.length,
-        link: `${shareUrl(request, phone, fresh[0]!.id).split('/natija')[0]}/kabinet/tahlillar`,
-      }),
-    );
-    return 1;
-  }
+  try {
+    if (fresh.length > MAX_SEPARATE) {
+      await sendMessage(
+        user.telegram_id,
+        botText('result.ready.many', lang, {
+          n: fresh.length,
+          link: `${shareUrl(request, phone, fresh[0]!.id).split('/natija')[0]}/kabinet/tahlillar`,
+        }),
+      );
+      return 1;
+    }
 
-  for (const group of fresh) {
-    await sendMessage(
-      user.telegram_id,
-      botText('result.ready', lang, {
-        title: group.title,
-        date: fmtDate(group.date),
-        link: shareUrl(request, phone, group.id),
-      }),
-    );
-    sent++;
+    for (const group of fresh) {
+      await sendMessage(
+        user.telegram_id,
+        botText('result.ready', lang, {
+          title: group.title,
+          date: fmtDate(group.date),
+          link: shareUrl(request, phone, group.id),
+        }),
+      );
+      delivered.push(group.id);
+    }
+    return delivered.length;
+  } catch (err) {
+    /*
+      Xabar yetmadi: yetib bormagan natijalar "xabar berilgan" bo'lib
+      qolmasin. Bemor botni bloklagan bo'lsa belgi qoladi — qayta
+      urinish foydasiz.
+    */
+    if (isTransientTelegramError(err)) {
+      /*
+        Yangi bemorda hech narsa yetib bormagan bo'lsa ro'yxatning o'zi
+        olib tashlanadi: u "birinchi marta ko'rilayotgan" bo'lib qoladi va
+        tez yugurishning o'zida (har 15 daqiqada) qayta uriniladi.
+        Aks holda — faqat yetib borganlar belgilanadi, qolgani tungi
+        to'liq aylanishda yoki yaqin navbat bo'lsa tezroq yuboriladi.
+      */
+      const retry =
+        firstTime && delivered.length === 0
+          ? forget(user.telegram_id)
+          : remember(user.telegram_id, [...baseline, ...delivered]);
+      await retry.catch(() => undefined);
+    }
+    throw err;
   }
-  return sent;
+}
+
+/** Ro'yxatni olib tashlaydi: bemor yana "birinchi marta ko'rilayotgan" bo'ladi. */
+async function forget(telegramId: string): Promise<void> {
+  await db.send(
+    new UpdateCommand({
+      TableName: TABLES.users,
+      Key: { telegram_id: telegramId },
+      UpdateExpression: 'REMOVE results_notified',
+    }),
+  );
 }
 
 /** Xabar berilgan hujjatlar ro'yxatini yozadi (oxirgi 500 tasi). */

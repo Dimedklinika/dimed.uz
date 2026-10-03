@@ -21,6 +21,22 @@ export const langFromTelegram = (code: string | undefined): Lang => {
 type Entry = Record<Lang, string>;
 
 const messages = {
+  // --- saytga kirish kodi ---
+  'login.code': {
+    uz: 'Saytga kirish kodingiz:\n\n<code>{code}</code>\n\nKod ustiga bossangiz — nusxalanadi. 5 daqiqa amal qiladi, hech kimga bermang.\n\nYoki kodni yozmasdan — pastdagi tugma bilan kiring.',
+    ru: 'Код для входа на сайт:\n\n<code>{code}</code>\n\nНажмите на код — он скопируется. Действует 5 минут, никому не сообщайте.\n\nИли войдите без ввода кода — кнопкой ниже.',
+    en: 'Your sign-in code:\n\n<code>{code}</code>\n\nTap the code to copy it. It is valid for 5 minutes — do not share it.\n\nOr sign in without typing it — use the button below.',
+  },
+  'login.btn.open': { uz: '🔐 Saytga kirish', ru: '🔐 Войти на сайт', en: '🔐 Sign in to the site' },
+  'login.btn.copy': { uz: '📋 Kodni nusxalash', ru: '📋 Скопировать код', en: '📋 Copy the code' },
+
+  // --- /id: administrator yoki shifokorni qo'shish uchun Telegram ID ---
+  'id.reply': {
+    uz: 'Sizning Telegram ID raqamingiz:\n\n<code>{id}</code>\n\nRaqam ustiga bossangiz — nusxalanadi. Administrator yoki shifokor sifatida qo‘shilish uchun uni sayt egasiga yuboring.',
+    ru: 'Ваш Telegram ID:\n\n<code>{id}</code>\n\nНажмите на номер — он скопируется. Чтобы вас добавили администратором или врачом, отправьте его владельцу сайта.',
+    en: 'Your Telegram ID:\n\n<code>{id}</code>\n\nTap the number to copy it. To be added as an administrator or a doctor, send it to the site owner.',
+  },
+
   // --- tahlil tayyor (G1) ---
   'result.ready': {
     uz: '🧪 <b>Tahlil natijangiz tayyor</b>\n\n{title}\n{date}\n\nNatijani ko‘rish, PDF yuklash va ulashish:\n{link}',

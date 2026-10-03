@@ -71,6 +71,7 @@ import { t } from '../../../data/i18n';
     const s = statusLabel[a.status] ?? { text: a.status, cls: 'muted' };
     const age = a.patientBirthDate ? ageOf(a.patientBirthDate) : null;
     const meta = [
+      a.serviceName ? `Xizmat: ${a.serviceName}` : '',
       a.patientBirthDate ? `${formatBirthDate(a.patientBirthDate)}${age !== null ? ` · ${age} yosh` : ''}` : '',
       a.phone,
     ]
@@ -217,7 +218,7 @@ import { t } from '../../../data/i18n';
     background: var(--chip-bg);
     color: var(--muted);
     border-radius: 12px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 650;
     line-height: 1.2;
     cursor: pointer;
@@ -230,7 +231,7 @@ import { t } from '../../../data/i18n';
   }
 
   .days :global(.day small) {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
   }
 
@@ -359,7 +360,7 @@ import { t } from '../../../data/i18n';
 
   .queue :global(.pill) {
     grid-area: pill;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     border-radius: 999px;
     padding: 4px 8px;
