@@ -197,7 +197,9 @@ const featuredAnalyses = featured
           <div class="how-num">4</div>
           <div>
             <h3>{h('how.4.title', lang)}</h3>
-            <p>{h('how.4.text', lang)}</p>
+            <p data-pay-text data-clinic={h('how.4.text', lang)} data-online={h('how.4.text.online', lang)}>
+              {h('how.4.text', lang)}
+            </p>
             <span class="rule">{h('how.rule', lang)}</span>
           </div>
         </div>

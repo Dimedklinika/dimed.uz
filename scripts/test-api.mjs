@@ -3341,6 +3341,31 @@ await test('PAYMENT_ENABLED o\'chiq bo\'lsa bron yana kassada to\'lash rejimida'
   assert.equal(data.redirectUrl, undefined, 'to\'lov havolasi bo\'lmasligi kerak');
 });
 
+await test('/api/doctors to\'lov rejimini aytadi: vidjet kassa yoki Payme matnini tanlaydi', async () => {
+  // O'chiq — kassada (tana massivligicha qoladi: admin sahifalari ham o'qiydi).
+  const off = await call(doctorsList, 'https://dimed.uz/api/doctors');
+  assert.equal(off.headers.get('x-payment-mode'), 'at_clinic');
+  assert.ok(Array.isArray(await off.json()));
+
+  process.env.PAYMENT_ENABLED = '1';
+  try {
+    const on = await call(doctorsList, 'https://dimed.uz/api/doctors');
+    assert.equal(on.headers.get('x-payment-mode'), 'online');
+
+    // Kassa ID yo'q bo'lsa bron baribir kassada — sarlavha ham shuni aytadi.
+    const merchant = process.env.PAYME_MERCHANT_ID;
+    delete process.env.PAYME_MERCHANT_ID;
+    try {
+      const noKey = await call(doctorsList, 'https://dimed.uz/api/doctors');
+      assert.equal(noKey.headers.get('x-payment-mode'), 'at_clinic');
+    } finally {
+      process.env.PAYME_MERCHANT_ID = merchant;
+    }
+  } finally {
+    delete process.env.PAYMENT_ENABLED;
+  }
+});
+
 await test('administrator onlayn to\'lovni o\'tkazib yuboradi (sinov), boshqalar — yo\'q', async () => {
   process.env.PAYMENT_ENABLED = '1';
   const restore = clearUpcoming();

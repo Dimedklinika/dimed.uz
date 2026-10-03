@@ -360,6 +360,13 @@ export const messages = {
     en: 'You will pay {price} UZS at the reception desk',
   },
   'booking.confirm.button': { uz: 'Tasdiqlash', ru: 'Подтвердить', en: 'Confirm' },
+  // Onlayn to'lov yoqilganda (PAYMENT_ENABLED=1) pulli qabulda kassa matni o'rniga
+  'booking.confirm.payOnline': {
+    uz: 'Tasdiqlagach Payme orqali {price} soʻm toʻlaysiz',
+    ru: 'После подтверждения — оплата {price} сум через Payme',
+    en: 'After confirming you will pay {price} UZS with Payme',
+  },
+  'booking.confirm.payButton': { uz: 'Payme orqali toʻlash', ru: 'Оплатить через Payme', en: 'Pay with Payme' },
   // Shifokorning qo'shimcha xizmatlari (massaj, UZI, qayta ko'rik) — faqat xizmati bor shifokorda
   'booking.pickService': { uz: 'Xizmatni tanlang', ru: 'Выберите услугу', en: 'Choose a service' },
   'booking.service.main': { uz: 'Qabul (konsultatsiya)', ru: 'Приём (консультация)', en: 'Consultation' },
