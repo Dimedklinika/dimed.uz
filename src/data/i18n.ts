@@ -360,6 +360,13 @@ export const messages = {
     en: 'You will pay {price} UZS at the reception desk',
   },
   'booking.confirm.button': { uz: 'Tasdiqlash', ru: 'Подтвердить', en: 'Confirm' },
+  // Onlayn to'lov yoqilganda (PAYMENT_ENABLED=1) pulli qabulda kassa matni o'rniga
+  'booking.confirm.payOnline': {
+    uz: 'Tasdiqlagach Payme orqali {price} soʻm toʻlaysiz',
+    ru: 'После подтверждения — оплата {price} сум через Payme',
+    en: 'After confirming you will pay {price} UZS with Payme',
+  },
+  'booking.confirm.payButton': { uz: 'Payme orqali toʻlash', ru: 'Оплатить через Payme', en: 'Pay with Payme' },
   // Shifokorning qo'shimcha xizmatlari (massaj, UZI, qayta ko'rik) — faqat xizmati bor shifokorda
   'booking.pickService': { uz: 'Xizmatni tanlang', ru: 'Выберите услугу', en: 'Choose a service' },
   'booking.service.main': { uz: 'Qabul (konsultatsiya)', ru: 'Приём (консультация)', en: 'Consultation' },
@@ -374,6 +381,17 @@ export const messages = {
     uz: 'Bu xizmat uchun toʻlov kerak emas',
     ru: 'Эта услуга бесплатна — оплата не нужна',
     en: 'This service is free — no payment needed',
+  },
+  // Bepul qayta ko'rik: sayt oldingi qabulni har doim ko'rmaydi — shartni qabulxona tekshiradi.
+  'booking.confirm.followupNote': {
+    uz: 'Bepul, agar oxirgi {n} kun ichida shu shifokorga oddiy qabulga kelgan boʻlsangiz — qabulxonada tekshiriladi',
+    ru: 'Бесплатно, если за последние {n} дн. вы были у этого врача на обычном приёме — проверят в регистратуре',
+    en: 'Free if you had a regular visit with this doctor in the last {n} days — checked at the reception desk',
+  },
+  'booking.success.followupUnverified': {
+    uz: 'Saytda shu shifokorga oldingi qabulingiz koʻrinmadi. Qabulxonada tekshiriladi: oxirgi {n} kun ichida oddiy qabulga kelmagan boʻlsangiz, oddiy qabul narxi olinadi.',
+    ru: 'На сайте не видно вашего прошлого приёма у этого врача. Регистратура проверит: если за последние {n} дн. обычного приёма не было, оплачивается обычный приём.',
+    en: 'Your previous visit with this doctor is not visible on the site. The reception desk will check: without a regular visit in the last {n} days, the regular fee applies.',
   },
   // Faqat administratorga ko'rinadi: onlayn to'lovni har safar to'lamasdan sinash.
   'booking.confirm.adminSkip': {

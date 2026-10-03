@@ -230,7 +230,11 @@ import { t } from '../../data/i18n';
       </div>
       <div class="appt-foot">
         <span class="pill ${s.cls}">${s.text}</span>
-        <span class="dt">${fmtPrice(a.price)} · ${a.status === 'paid' ? 'onlayn toʻlangan' : 'kassada toʻlanadi'}</span>
+        <span class="dt">${
+          a.price === 0
+            ? 'bepul' // qayta ko'rik kabi bepul xizmat: "0 soʻm · kassada toʻlanadi" deyilmaydi
+            : `${fmtPrice(a.price)} · ${a.status === 'paid' ? 'onlayn toʻlangan' : 'kassada toʻlanadi'}`
+        }</span>
       </div>
       ${move}
     </div>`;

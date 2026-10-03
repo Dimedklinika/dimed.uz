@@ -96,6 +96,7 @@ const { toTashkent, toInstant, addDays } = await import(
   pathToFileURL(join(fnDir, 'lib', 'time.ts')).href
 );
 const { toHHMM } = await import(pathToFileURL(join(fnDir, 'lib', 'slots.ts')).href);
+const { staffServiceName } = await import(pathToFileURL(join(fnDir, 'lib', 'appointments.ts')).href);
 
 const ctx = {};
 /** Cron funksiyalari maxfiy sarlavhasiz so'rovni cheklaydi (lib/cron.ts) — oddiy testlar uni yuboradi. */
@@ -3065,7 +3066,7 @@ await test('xizmatsiz eski mijoz ham yoziladi: serviceId berilmasa asosiy qabul,
   }
 });
 
-await test('qayta ko\'rik: shartsiz rad etiladi; qabuldan keyin 10 kun ichida bepul va necha marta bo\'lsa ham', async () => {
+await test('qayta ko\'rik: sayt shartni ko\'rmasa ham yoziladi (qabulxona tekshiradi); ko\'rsa — bepul, necha marta bo\'lsa ham', async () => {
   const restore = clearUpcoming();
   const keys = [];
   const seeded = [];
@@ -3096,18 +3097,36 @@ await test('qayta ko\'rik: shartsiz rad etiladi; qabuldan keyin 10 kun ichida be
     const [nearTime] = await freeTimes(NEAR_DATE);
     keys.push(
       `ashurov#${SVC_DATE}|${t1}`, `ashurov#${SVC_DATE}|${t2}`, `ashurov#${SVC_DATE}|${t3}`,
-      `ashurov#${NEAR_DATE}|${nearTime}`,
+      `ashurov#${NEAR_DATE}|${nearTime}`, `ashurov#${LATE_DATE}|${lateTime}`,
     );
     const followup = (time, date = SVC_DATE) => call(book, 'https://dimed.uz/api/book', bookAs({
       doctor: 'ashurov', date, time, serviceId: 'qayta-korik',
     }));
     const stored = (time, date = SVC_DATE) => table.get(`ashurov#${date}|${time}`);
 
-    // 1) Oldin kelmagan bemor.
-    const none = await followup(t1);
-    assert.equal(none.status, 400);
-    assert.match((await none.json()).error, /shu shifokorga oxirgi 10 kun ichida kelgan/);
-    assert.equal(stored(t1), undefined);
+    /*
+      Bron har doim o'tadi (sayt 1C dagi qabulni ko'rmaydi — rad etmaydi);
+      natija: sayt shartni ko'rdimi (`followup_verified`). Slot keyingi holat
+      uchun bo'shatiladi.
+    */
+    const verifiedFor = async (label) => {
+      const res = await followup(t1);
+      assert.equal(res.status, 200, `${label}: ${JSON.stringify(await res.clone().json())}`);
+      const body = await res.json();
+      const row = stored(t1);
+      assert.equal(body.appointment.followupVerified, row.followup_verified, `${label}: javob va yozuv bir xil`);
+      assert.deepEqual([row.price, row.status, row.service_followup], [0, 'booked', true], label);
+      table.delete(`ashurov#${SVC_DATE}|${t1}`);
+      return row.followup_verified;
+    };
+
+    // 1) Sayt oldingi qabulni ko'rmaydi — yoziladi, bemorga "qabulxonada tekshiriladi".
+    telegramCalls.length = 0;
+    assert.equal(await verifiedFor('oldin kelmagan'), false);
+    assert.ok(
+      telegramCalls.some((c) => /qabulxonada tekshiriladi.*oddiy qabul narxi olinadi/s.test(c.body.text ?? '')),
+      'botda shart va oqibati aytiladi',
+    );
 
     // 2) Boshqa shifokorga kelgan — hisobga kirmaydi.
     const addVisit = (id, doctorId, daysAgo, extra = {}) => {
@@ -3123,21 +3142,21 @@ await test('qayta ko\'rik: shartsiz rad etiladi; qabuldan keyin 10 kun ichida be
       seeded.push(key);
     };
     addVisit('v-boshqa', 'rahimov', 3);
-    assert.equal((await followup(t1)).status, 400, 'boshqa shifokorga kelgan sanalmaydi');
+    assert.equal(await verifiedFor('boshqa shifokor'), false, 'boshqa shifokorga kelgan sanalmaydi');
 
     // 3) Muddatidan eski qabul — hisobga kirmaydi.
     addVisit('v-eski', 'ashurov', 20);
-    assert.equal((await followup(t1)).status, 400, '10 kundan eski qabul sanalmaydi');
+    assert.equal(await verifiedFor('eski qabul'), false, '10 kundan eski qabul sanalmaydi');
 
     // 4) Kelmagan (no_show) qabul — hisobga kirmaydi.
     addVisit('v-kelmadi', 'ashurov', 2, { status: 'no_show' });
-    assert.equal((await followup(t1)).status, 400, 'kelmagan qabul sanalmaydi');
+    assert.equal(await verifiedFor('kelmagan'), false, 'kelmagan qabul sanalmaydi');
 
     // 5) Qayta ko'rikning o'zi muddatni uzaytirmaydi — zanjir bo'lib abadiy bepul qolmasin.
     addVisit('v-qayta', 'ashurov', 1, { service_followup: true });
-    assert.equal((await followup(t1)).status, 400, 'qayta ko\'rik yangi qayta ko\'rik bermaydi');
+    assert.equal(await verifiedFor('qayta ko\'rik zanjiri'), false, 'qayta ko\'rik yangi qayta ko\'rik bermaydi');
 
-    // 6) Oddiy qabuldan keyin 10 kun ichida shu shifokorga kelgan — bepul, to'lovsiz.
+    // 6) Oddiy qabuldan keyin 10 kun ichida shu shifokorga kelgan — tasdiqlangan, bepul, to'lovsiz.
     addVisit('v-keldi', 'ashurov', 4);
     telegramCalls.length = 0;
     const ok = await followup(t1);
@@ -3146,41 +3165,50 @@ await test('qayta ko\'rik: shartsiz rad etiladi; qabuldan keyin 10 kun ichida be
     assert.equal(body.mode, 'at_clinic', 'bepul xizmat Payme\'ga o\'tmaydi');
     assert.equal(body.redirectUrl, undefined);
     assert.equal(body.appointment.price, 0);
+    assert.equal(body.appointment.followupVerified, true);
     const row = stored(t1);
-    assert.deepEqual([row.price, row.status, row.service_followup], [0, 'booked', true]);
+    assert.deepEqual([row.price, row.status, row.service_followup, row.followup_verified], [0, 'booked', true, true]);
     assert.equal(tableOf('test_payments').get(body.paymentId).status, 'free');
     assert.ok(telegramCalls.some((c) => c.body.text?.includes('Narx: bepul')), 'xabarda "bepul"');
     assert.ok(
-      !telegramCalls.some((c) => /kassasiga/.test(c.body.text ?? '')),
-      'bepul xizmatda "kassaga to\'laysiz" demaydi',
+      !telegramCalls.some((c) => /kassasiga|tekshiriladi/.test(c.body.text ?? '')),
+      'tasdiqlangan qayta ko\'rikda "kassaga to\'laysiz" ham, "tekshiriladi" ham yo\'q',
     );
 
     // 7) Necha marta bo'lsa ham: ikkinchi va uchinchi qayta ko'rik ham beriladi.
     for (const time of [t2, t3]) {
       const again = await followup(time);
       assert.equal(again.status, 200, JSON.stringify(await again.clone().json()));
-      assert.equal(stored(time).service_followup, true);
+      assert.deepEqual([stored(time).service_followup, stored(time).followup_verified], [true, true]);
     }
 
-    // 8) Muddatdan keyingi kun: 4 kun oldin kelgan — oxirgi kun bugundan 6 kun keyin.
+    // 8) Muddatdan keyingi kun (4 kun oldin kelgan, 12-kun): yoziladi, lekin tasdiqlanmagan.
     const late = await followup(lateTime, LATE_DATE);
-    assert.equal(late.status, 400);
-    const until = addDays(toTashkent(new Date(Date.now() - 4 * 86_400_000)).dateKey, 10);
-    const [uy, um, ud] = until.split('-');
-    assert.match((await late.json()).error, new RegExp(`${ud}\\.${um}\\.${uy} gacha`));
-    assert.equal(stored(lateTime, LATE_DATE), undefined);
+    assert.equal(late.status, 200, JSON.stringify(await late.clone().json()));
+    assert.equal(stored(lateTime, LATE_DATE).followup_verified, false);
+    table.delete(`ashurov#${LATE_DATE}|${lateTime}`);
 
-    // 9) Ko'chirishda ham muddat saqlanadi: uzoq kunga bo'lmaydi, aynan oxirgi (10-) kunga bo'ladi.
+    // 9) Ko'chirishda belgi yangi kun bo'yicha qayta hisoblanadi: uzoq kunga — tasdiqlanmagan,
+    //    yana muddat ichiga (aynan oxirgi, 10-kun) — tasdiqlangan.
     const farMove = await call(reschedule, 'https://dimed.uz/api/reschedule', move({
       doctor: 'ashurov', date: SVC_DATE, time: t1, toDate: LATE_DATE, toTime: lateTime,
     }));
-    assert.equal(farMove.status, 400);
-    assert.equal(stored(t1).status, 'booked', 'rad etilgan ko\'chirish bronni o\'zgartirmaydi');
+    assert.equal(farMove.status, 200, JSON.stringify(await farMove.clone().json()));
+    assert.equal(stored(lateTime, LATE_DATE).followup_verified, false);
     const nearMove = await call(reschedule, 'https://dimed.uz/api/reschedule', move({
-      doctor: 'ashurov', date: SVC_DATE, time: t1, toDate: NEAR_DATE, toTime: nearTime,
+      doctor: 'ashurov', date: LATE_DATE, time: lateTime, toDate: NEAR_DATE, toTime: nearTime,
     }));
     assert.equal(nearMove.status, 200, JSON.stringify(await nearMove.clone().json()));
-    assert.equal(stored(nearTime, NEAR_DATE).service_followup, true);
+    assert.deepEqual(
+      [stored(nearTime, NEAR_DATE).service_followup, stored(nearTime, NEAR_DATE).followup_verified],
+      [true, true],
+    );
+
+    // 10) Xodimlar ro'yxatida tasdiqlanmagan qayta ko'rik belgilanadi.
+    assert.equal(staffServiceName({ service_name: "Qayta ko'rik", followup_verified: false }), "Qayta ko'rik (qabulxonada tekshirilsin)");
+    assert.equal(staffServiceName({ service_name: "Qayta ko'rik", followup_verified: true }), "Qayta ko'rik");
+    assert.equal(staffServiceName({ service_name: 'Massaj' }), 'Massaj');
+    assert.equal(staffServiceName({}), null);
   } finally {
     delete process.env.PAYMENT_ENABLED;
     for (const key of keys) table.delete(key);
@@ -3339,6 +3367,31 @@ await test('PAYMENT_ENABLED o\'chiq bo\'lsa bron yana kassada to\'lash rejimida'
   const data = await res.json();
   assert.equal(data.mode, 'at_clinic');
   assert.equal(data.redirectUrl, undefined, 'to\'lov havolasi bo\'lmasligi kerak');
+});
+
+await test('/api/doctors to\'lov rejimini aytadi: vidjet kassa yoki Payme matnini tanlaydi', async () => {
+  // O'chiq — kassada (tana massivligicha qoladi: admin sahifalari ham o'qiydi).
+  const off = await call(doctorsList, 'https://dimed.uz/api/doctors');
+  assert.equal(off.headers.get('x-payment-mode'), 'at_clinic');
+  assert.ok(Array.isArray(await off.json()));
+
+  process.env.PAYMENT_ENABLED = '1';
+  try {
+    const on = await call(doctorsList, 'https://dimed.uz/api/doctors');
+    assert.equal(on.headers.get('x-payment-mode'), 'online');
+
+    // Kassa ID yo'q bo'lsa bron baribir kassada — sarlavha ham shuni aytadi.
+    const merchant = process.env.PAYME_MERCHANT_ID;
+    delete process.env.PAYME_MERCHANT_ID;
+    try {
+      const noKey = await call(doctorsList, 'https://dimed.uz/api/doctors');
+      assert.equal(noKey.headers.get('x-payment-mode'), 'at_clinic');
+    } finally {
+      process.env.PAYME_MERCHANT_ID = merchant;
+    }
+  } finally {
+    delete process.env.PAYMENT_ENABLED;
+  }
 });
 
 await test('administrator onlayn to\'lovni o\'tkazib yuboradi (sinov), boshqalar — yo\'q', async () => {
