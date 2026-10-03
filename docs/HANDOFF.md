@@ -581,6 +581,11 @@ standart nomi bilan yaratilgan `AnalysisResult` — ega tasdiqlagach o'chiriladi
     `paymentEnabled()`; eski `PAYME_ENABLED` ham tan olinadi). Bo'sh —
     bron `booked` bo'ladi, 5-qadamda «Qabulxona kassasiga X so'm
     to'laysiz». Payme kodi saqlangan; `1` + kalitlar — onlayn rejim.
+    Rejimni vidjet `/api/doctors` javobining `x-payment-mode` sarlavhasidan
+    (`online` | `at_clinic`) biladi: onlayn rejimda pulli qabulda «Tasdiqlagach
+    Payme orqali X so'm to'laysiz» va «Payme orqali to'lash» tugmasi, bosh
+    sahifadagi «Qanday ishlaydi» 4-band ham Payme deydi (`data-pay-text`).
+    Bepul xizmat va admin «sinov bron» — kassa matni bilan qoladi.
     Bo'shatilgan slot (`moved`/`cancelled*`) qayta band qilinadi —
     `book` va `reschedule` shartida shu holatlar bor.
 

@@ -512,11 +512,103 @@ await test('xizmat tanlanmasa asosiy qabul: serviceId yuborilmaydi, narx shifoko
   await page.waitForTimeout(400);
 
   assert.match(await page.textContent('.price-big'), /70\s000/);
+  // Onlayn to'lov o'chiq (sarlavha yo'q) — kassa matni va oddiy Tasdiqlash tugmasi.
+  assert.match(await page.textContent('.price-note'), /kassasiga/);
+  assert.equal((await page.textContent('#wBook')).trim(), 'Tasdiqlash');
+  assert.doesNotMatch(await page.textContent('[data-pay-text]'), /Payme/);
   booked = null;
   await page.click('#wBook');
   await page.waitForTimeout(400);
   assert.ok(booked);
   assert.equal(booked.serviceId, undefined, 'asosiy qabulda xizmat kaliti yuborilmaydi');
+  await ctx.close();
+});
+
+/** Onlayn to'lov yoqilgan server: `/api/doctors` sarlavhasi va Payme havolasini qaytaradigan bron. */
+async function onlineContext() {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: true });
+  await ctx.route('**/api/doctors', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'x-payment-mode': 'online' },
+      body: JSON.stringify(withServices),
+    }),
+  );
+  await ctx.route('**/api/book', (route) => {
+    booked = JSON.parse(route.request().postData() ?? '{}');
+    const free = booked.serviceId === 'qayta-korik';
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        free
+          ? { ok: true, mode: 'at_clinic', appointment: { price: 0, serviceName: "Qayta ko'rik" } }
+          : { ok: true, mode: 'online', redirectUrl: base + '/?payme=test' },
+      ),
+    });
+  });
+  return ctx;
+}
+
+/** Xizmati bor shifokorda 5-qadamgacha yuradi. */
+async function walkToCheckout(page, serviceId) {
+  await page.goto(base + '/', { waitUntil: 'networkidle' });
+  await page.addStyleTag({ content: 'html{scroll-behavior:auto !important}' });
+  await page.waitForTimeout(400);
+  await page.click('.dept-btn[data-id="terapiya"]');
+  await page.click('.doc-btn');
+  await page.waitForTimeout(300);
+  if (serviceId) await page.click(`.svc-pill[data-s="${serviceId}"]`);
+  await page.click('.slot-btn:not(.busy)');
+  await page.waitForTimeout(400);
+  await page.$eval('#privacyOk', (b) => {
+    if (!b.checked) b.click();
+  });
+  await page.click('[data-pick="A1"]');
+  await page.waitForTimeout(400);
+}
+
+await test('onlayn to\'lov yoqilganda: "Payme orqali to\'laysiz", tugma Payme\'ga olib boradi', async () => {
+  const ctx = await onlineContext();
+  const page = await ctx.newPage();
+  const jsErrors = [];
+  page.on('pageerror', (e) => jsErrors.push(e.message));
+  await walkToCheckout(page, null);
+  assert.equal(await activeStep(page), 'Tasdiqlash');
+
+  // Bosh sahifadagi "Qanday ishlaydi" ham kassa emas, Payme deydi.
+  assert.match(await page.textContent('[data-pay-text]'), /Payme/);
+  assert.doesNotMatch(await page.textContent('[data-pay-text]'), /kassasida/);
+
+  const note = await page.textContent('.price-note');
+  assert.match(note, /Payme orqali 70\s000/);
+  assert.doesNotMatch(note, /kassasiga/);
+  assert.match((await page.textContent('#wBook')).trim(), /^Payme orqali to.lash$/);
+
+  booked = null;
+  await page.click('#wBook');
+  await page.waitForURL(/payme=test/, { timeout: 5000 });
+  assert.ok(booked, 'bron so‘rovi ketishi kerak');
+  assert.deepEqual(jsErrors, [], 'sahifada JS xatosi bo‘lmasin');
+  await ctx.close();
+});
+
+await test('onlayn to\'lov yoqilgan bo\'lsa ham bepul qayta ko\'rik Payme\'siz tasdiqlanadi', async () => {
+  const ctx = await onlineContext();
+  const page = await ctx.newPage();
+  await walkToCheckout(page, 'qayta-korik');
+
+  assert.match(await page.textContent('.price-big'), /Bepul/);
+  assert.doesNotMatch(await page.textContent('.price-note'), /Payme|kassasiga/);
+  assert.equal((await page.textContent('#wBook')).trim(), 'Tasdiqlash');
+
+  booked = null;
+  await page.click('#wBook');
+  await page.waitForTimeout(400);
+  assert.equal(booked.serviceId, 'qayta-korik');
+  assert.equal(await page.isVisible('.success'), true, 'Payme\'ga o‘tmay, muvaffaqiyat oynasi');
   await ctx.close();
 });
 

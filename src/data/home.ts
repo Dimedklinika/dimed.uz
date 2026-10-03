@@ -144,6 +144,12 @@ const copy = {
     ru: 'Слот занимается, в бот приходит подтверждение. Оплата — в кассе регистратуры в день приёма. За час до приёма придёт напоминание.',
     en: 'The slot is held and the bot confirms it. Payment is at the reception desk on the day. A reminder arrives an hour before.',
   },
+  // Onlayn to'lov yoqilganda bron vidjeti yuqoridagi matnni shunga almashtiradi.
+  'how.4.text.online': {
+    uz: 'Slot band qilinadi, toʻlov — Payme orqali onlayn. Toʻlovdan soʻng botga tasdiq keladi. Qabulga 1 soat qolganda eslatma yuboriladi.',
+    ru: 'Слот занимается, оплата — онлайн через Payme. После оплаты в бот приходит подтверждение. За час до приёма придёт напоминание.',
+    en: 'The slot is held and you pay online with Payme. After payment the bot confirms it. A reminder arrives an hour before.',
+  },
   'how.rule': {
     uz: 'Qabulga 1 soat qolgunicha boshqa vaqtga koʻchirish yoki bekor qilish mumkin',
     ru: 'Перенести или отменить можно не позднее чем за час до приёма',

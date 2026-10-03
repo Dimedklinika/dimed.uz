@@ -200,6 +200,23 @@ const widgetData = JSON.stringify({ departments, doctors });
       : { id: 'main', name: '', price: doc.price, followupDays: null, main: true };
   };
   const priceLabel = (price) => (price === 0 ? tr('booking.service.free') : fmtPrice(price));
+
+  /*
+    To'lov rejimi: 'at_clinic' (kassada) yoki 'online' (Payme). Uni server
+    biladi (PAYMENT_ENABLED) va `/api/doctors` javobining `x-payment-mode`
+    sarlavhasida aytadi. Bilinguncha — kassada (to'lov o'chiq holati).
+    Sahifadagi `[data-pay-text]` matnlari (bosh sahifa "Qanday ishlaydi")
+    ham shunga qarab almashadi.
+  */
+  let payMode = 'at_clinic';
+  function applyPayMode(mode) {
+    const changed = mode !== payMode;
+    payMode = mode;
+    document.querySelectorAll('[data-pay-text]').forEach((el) => {
+      el.textContent = mode === 'online' ? el.dataset.online : el.dataset.clinic;
+    });
+    if (changed && state.step === 5 && !state.booked) render();
+  }
   const serviceChooserHtml = (doc) => {
     const list = servicesOf(doc);
     if (!list.length) return '';
@@ -793,6 +810,13 @@ const widgetData = JSON.stringify({ departments, doctors });
     const priceNumber = price.toLocaleString('ru-RU').replace(/,/g, ' ');
     // Bepul xizmatda "kassaga to'laysiz" deyilmaydi.
     const payNote = price === 0 ? tr('booking.confirm.free') : tr('booking.confirm.payAtDesk', { price: priceNumber });
+    /*
+      Onlayn to'lov yoqilgan (server `/api/doctors` da aytadi) va qabul pulli
+      bo'lsa, "Tasdiqlash" Payme sahifasiga olib boradi — matn va tugma ham
+      shuni aytadi. Bepul xizmat Payme'ga o'tmaydi (server ham shunday).
+    */
+    const payOnline = payMode === 'online' && price > 0;
+    const onlineNote = tr('booking.confirm.payOnline', { price: priceNumber });
     const serviceRow = serviceName
       ? `<div class="sum-row"><span class="k">${esc(tr('booking.summary.service'))}</span><span class="v">${esc(serviceName)}</span></div>`
       : '';
@@ -824,16 +848,16 @@ const widgetData = JSON.stringify({ departments, doctors });
     }
 
     /*
-      Tasdiqlash qadami (B2): onlayn to'lov yo'q — narx katta ko'rsatiladi,
-      "qabulxona kassasiga to'laysiz" matni va Tasdiqlash tugmasi. Server
-      PAYMENT_ENABLED bilan onlayn rejimga o'tsa, javobdagi redirectUrl
-      quyida avvalgidek ishlaydi.
+      Tasdiqlash qadami (B2): narx katta ko'rsatiladi. Kassada to'lash
+      rejimida — "qabulxona kassasiga to'laysiz" va Tasdiqlash tugmasi;
+      onlayn rejimda (PAYMENT_ENABLED=1) — "Payme orqali to'laysiz" va
+      "Payme orqali to'lash" tugmasi, javobdagi redirectUrl to'lovga olib boradi.
     */
     wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.confirm.title'))}</div>
       <div class="price-box">
         <div class="price-lab">${esc(tr('booking.confirm.price'))}</div>
         <div class="price-big">${esc(priceLabel(price))}</div>
-        <div class="price-note">${esc(payNote)}</div>
+        <div class="price-note">${esc(payOnline ? onlineNote : payNote)}</div>
       </div>
       <div class="sum-card">
         <div class="sum-row" id="whoRow" hidden><span class="k">${esc(tr('booking.summary.patient'))}</span>
@@ -846,7 +870,7 @@ const widgetData = JSON.stringify({ departments, doctors });
         <div class="sum-row"><span class="k">${esc(tr('booking.summary.time'))}</span><span class="v">${state.time} · ${d.slotMinutes} ${esc(tr('booking.minutes'))}</span></div>
       </div>
       <p class="book-msg" id="bookMsg" role="status" aria-live="polite"></p>
-      <button class="btn w-full" id="wBook">${esc(tr('booking.confirm.button'))}</button>
+      <button class="btn w-full" id="wBook">${esc(tr(payOnline ? 'booking.confirm.payButton' : 'booking.confirm.button'))}</button>
       <p class="pay-note">${esc(tr('booking.confirm.note'))}</p>
       <button class="back-link">${esc(tr('booking.back'))}</button>`;
 
@@ -869,6 +893,13 @@ const widgetData = JSON.stringify({ departments, doctors });
            <input type="checkbox" id="skipPay" /> ${esc(tr('booking.confirm.adminSkip'))}
          </label>`,
       );
+      // Sinov bron Payme'ga o'tmaydi — belgilansa matn va tugma kassa rejimiga qaytadi.
+      const skip = wBody.querySelector('#skipPay');
+      skip.addEventListener('change', () => {
+        const online = payOnline && !skip.checked;
+        wBody.querySelector('.price-note').textContent = online ? onlineNote : payNote;
+        btn.textContent = tr(online ? 'booking.confirm.payButton' : 'booking.confirm.button');
+      });
     })();
 
     // 4-qadamda tanlangan bemor shu yerda ko'rinadi.
@@ -953,6 +984,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     try {
       const res = await fetch('/api/doctors');
       if (!res.ok) return;
+      applyPayMode(res.headers.get('x-payment-mode') === 'online' ? 'online' : 'at_clinic');
       const live = await res.json();
       if (Array.isArray(live) && live.length) {
         docs = live;

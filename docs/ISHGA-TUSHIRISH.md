@@ -322,7 +322,9 @@ Bular javob kutadi, shuning uchun yuqoridagi qadamlarga parallel yuritiladi.
 testlangan** (`docs/payme-integration.md`). Kassa ochilgach kalitlar
 Netlify'ga qo'yiladi, `PAYMENT_ENABLED=1` qilinadi va **bron mantig'i
 umuman o'zgarmaydi**. Kassa ochilmaguncha sayt «klinikada to'lash»
-rejimida to'liq ishlaydi.
+rejimida to'liq ishlaydi. Yoqilgach saytdagi to'lov matnlari («kassaga
+to'laysiz» → «Payme orqali to'laysiz») o'zi almashadi — qo'lda hech narsa
+o'zgartirilmaydi; o'zgaruvchidan keyin Netlify'da qayta deploy qiling.
 
 ---
 
