@@ -56,6 +56,8 @@ export default async (request: Request, _context: Context): Promise<Response> =>
         phone: session.phone,
         name: displayName(user),
         lang: user?.lang ?? 'uz',
+        // Til Sozlamalarda tanlanganmi (aks holda `lang` — shunchaki standart uz).
+        langSaved: Boolean(user?.lang),
       },
       200,
       noStore,

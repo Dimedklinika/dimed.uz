@@ -13,6 +13,8 @@ export type QueueItem = {
   status: string;
   patientName: string | null;
   patientBirthDate: string | null;
+  /** Bemor tanlagan xizmat (massaj, UZI ...); asosiy qabulda null. */
+  serviceName?: string | null;
 };
 
 export type DoctorData = {

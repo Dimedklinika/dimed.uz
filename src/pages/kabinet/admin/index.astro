@@ -106,6 +106,22 @@ const weekdays = [
         </div>
 
         <label class="fld">
+          <span>Qo‘shimcha xizmatlar (ixtiyoriy)</span>
+          <textarea
+            id="f-services"
+            rows="4"
+            spellcheck="false"
+            placeholder={'Massaj | 50000 | 1C kodi\nQayta ko‘rik | bepul | qayta:10'}></textarea>
+          <small class="fld-note">
+            Har qatorda bitta xizmat: <code>Nomi | narx | 1C kodi | qayta:N</code>. Narx — so‘m yoki
+            «bepul». 1C kodi (Tovar va xizmatlar katalogidagi kod) ixtiyoriy: navbat 1C ga shu xizmat
+            bilan tushadi. <code>qayta:10</code> — «qayta ko‘rik»: shu shifokorga oddiy qabulga kelgan
+            bemor qabuldan keyin 10 kun ichida necha marta bo‘lsa ham oladi. Asosiy qabul narxi
+            yuqoridagi «Narx». Xizmat yozilmasa, bemor faqat asosiy qabulni ko‘radi.
+          </small>
+        </label>
+
+        <label class="fld">
           <span>Telegram ID (kabinetiga kirishi uchun — ixtiyoriy)</span>
           <input id="f-tg" type="text" inputmode="numeric" placeholder="masalan 123456789" />
         </label>
@@ -146,6 +162,8 @@ const weekdays = [
     phone: string;
     active: boolean;
     ageGroup: 'all' | 'adult' | 'child';
+    /** Qo'shimcha xizmatlar, har qatorda bittadan ("Nomi | narx | 1C kodi | qayta:N"). */
+    servicesText: string;
     telegramId: string;
     linked: boolean;
   };
@@ -260,6 +278,8 @@ const weekdays = [
         <span class="nm">${esc(d.name)}</span>
         <span class="meta">${esc(d.job)} · ${fmtPrice(d.price)} so‘m · ${d.slotMinutes} daqiqa${
           AGE_TEXT[d.ageGroup] ? ` · ${AGE_TEXT[d.ageGroup]}` : ''
+        }${
+          d.servicesText ? ` · ${d.servicesText.split('\n').filter(Boolean).length} ta qo‘shimcha xizmat` : ''
         }</span>
       </div>
       <div class="doc-tags">
@@ -305,6 +325,7 @@ const weekdays = [
     el<HTMLInputElement>('f-hours').value = d?.hours ?? '';
     el<HTMLInputElement>('f-photo').value = d?.photo ?? '';
     el<HTMLInputElement>('f-phone').value = d?.phone ?? '';
+    el<HTMLTextAreaElement>('f-services').value = d?.servicesText ?? '';
     el<HTMLInputElement>('f-tg').value = d?.telegramId ?? '';
     el<HTMLInputElement>('f-active').checked = d ? d.active : true;
 
@@ -419,6 +440,7 @@ const weekdays = [
       hours: el<HTMLInputElement>('f-hours').value.trim(),
       photo: el<HTMLInputElement>('f-photo').value.trim(),
       phone: el<HTMLInputElement>('f-phone').value.trim(),
+      servicesText: el<HTMLTextAreaElement>('f-services').value,
       telegramId: el<HTMLInputElement>('f-tg').value.trim(),
       active: el<HTMLInputElement>('f-active').checked,
     };
@@ -560,7 +582,7 @@ const weekdays = [
   }
 
   .doc-rows :global(.tag) {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     border-radius: 999px;
     padding: 4px 8px;
@@ -631,6 +653,14 @@ const weekdays = [
     padding: 24px;
     width: 100%;
     max-width: 560px;
+    /* Shaffof "glass" fonda orqadagi sahifa matni ko'rinib, forma o'qilmasdi. */
+    background: var(--card-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    /* Ichidagi maydonlar oq-shaffof ranglar bilan chizilgan — qattiq fonda
+       ko'rinmay qolardi: maydon foni va chegarasi shu oynada o'zgartiriladi. */
+    --chip-bg: var(--bg);
+    --card-brd: var(--line);
   }
 
   .modal-head {
@@ -690,7 +720,8 @@ const weekdays = [
   }
 
   .fld input,
-  .fld select {
+  .fld select,
+  .fld textarea {
     border: 1px solid var(--card-brd);
     background: var(--chip-bg);
     color: var(--ink);
@@ -700,8 +731,15 @@ const weekdays = [
     font-size: 14px;
   }
 
+  .fld textarea {
+    resize: vertical;
+    min-height: 88px;
+    line-height: 1.5;
+  }
+
   .fld input:focus,
-  .fld select:focus {
+  .fld select:focus,
+  .fld textarea:focus {
     border-color: var(--leaf);
     outline: none;
   }

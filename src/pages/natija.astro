@@ -23,6 +23,7 @@ import { site } from '../data/site';
 <Base
   title="Tahlil natijasi — Dimed klinikasi"
   description="Laboratoriya tahlili natijasi: ko‘rsatkichlar, me’yoriy oraliqlar, PDF."
+  previewImage={false}
 >
   <meta slot="head" name="robots" content="noindex, nofollow" />
 
@@ -71,8 +72,8 @@ import { site } from '../data/site';
               <td><span class="info-label" id="lblBirth"></span><span class="info-value" id="valBirth"></span></td>
             </tr>
             <tr>
-              <td><span class="info-label" id="lblSample"></span><span class="info-value" id="valSample"></span></td>
-              <td><span class="info-label" id="lblDoctor"></span><span class="info-value" id="valDoctor"></span></td>
+              <td id="cellSample"><span class="info-label" id="lblSample"></span><span class="info-value" id="valSample"></span></td>
+              <td id="cellDoctor"><span class="info-label" id="lblDoctor"></span><span class="info-value" id="valDoctor"></span></td>
             </tr>
           </tbody>
         </table>
@@ -135,6 +136,8 @@ import { site } from '../data/site';
     sampleId: string | null;
     status: 'ready' | 'pending';
     items: Item[];
+    /** PDF dagi QR kod havolasi (/tekshirish). */
+    verifyUrl?: string | null;
   };
 
   const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -217,7 +220,14 @@ import { site } from '../data/site';
     el('valSample').textContent = [fmtDateTime(r.date), r.biomaterial, r.sampleId ? `№ ${r.sampleId}` : '']
       .filter(Boolean)
       .join(' · ') || '—';
-    el('valDoctor').textContent = r.doctor ?? '—';
+    /*
+      Yuborgan shifokor bo'lmasa katak umuman ko'rsatilmaydi (chiziqcha
+      ham emas): namuna ma'lumoti butun qatorni egallaydi — PDF dagi kabi.
+    */
+    const doctor = r.doctor?.trim() ?? '';
+    el('valDoctor').textContent = doctor;
+    el('cellDoctor').style.display = doctor ? '' : 'none';
+    el<HTMLTableCellElement>('cellSample').colSpan = doctor ? 1 : 2;
 
     // banner
     const abnormal = r.items.filter((i) => i.status === 'high' || i.status === 'low').length;
@@ -245,7 +255,8 @@ import { site } from '../data/site';
             ${desc ? `<span class="test-desc">${esc(desc)}</span>` : ''}
           </td>
           <td data-label="${esc(tr('result.col.value'))}"><span class="result-val">${esc(item.value ?? '—')}</span>${
-            item.unit ? ` <span class="unit">${esc(item.unit)}</span>` : ''
+            // Birlik faqat sonli qiymatga: "manfiy g/L" kabi ma'nosiz yozuv chiqmasin.
+            item.unit && /\d/.test(item.value ?? '') ? ` <span class="unit">${esc(item.unit)}</span>` : ''
           }</td>
           <td data-label="${esc(tr('result.col.status'))}"><span class="badge ${item.status ?? 'none'}">${esc(statusText(item.status))}</span></td>
           <td data-label="${esc(tr('result.col.range'))}">${esc(item.reference ?? '—')}</td>

@@ -45,6 +45,7 @@ type AppointmentRow = {
   status: string;
   price: number;
   patient_name?: string;
+  service_name?: string;
 };
 
 /*
@@ -106,6 +107,7 @@ async function loadAppointments(phone: string) {
       startsAt: a.starts_at,
       status: a.status,
       price: a.price,
+      serviceName: a.service_name ?? null,
       patientName: a.patient_name ?? null,
       upcoming: a.starts_at >= nowIso,
       // Ko'chirish faqat kuchdagi bronga va 1 soat qolgunicha.

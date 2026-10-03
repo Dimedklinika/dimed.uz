@@ -42,6 +42,8 @@ type Row = {
   patientName: string;
   phone: string;
   price: number;
+  /** tanlangan qo'shimcha xizmat; asosiy qabulda bo'sh */
+  serviceName: string;
   /** slotni band qilib turibdimi (muddati o'tgan hold — yo'q) */
   active: boolean;
   createdAt: string;
@@ -80,6 +82,7 @@ const toRow = (a: Appointment, names: Map<string, string>, now: Date): Row => ({
   patientName: a.patient_name ?? '',
   phone: a.phone ?? '',
   price: a.price ?? 0,
+  serviceName: a.service_name ?? '',
   active: holdsSlot(a, now),
   createdAt: a.created_at ?? '',
 });

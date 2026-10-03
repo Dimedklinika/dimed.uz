@@ -3,6 +3,7 @@ import { toAgeGroup, type AgeGroup } from './age.ts';
 import { db, TABLES } from './db.ts';
 import { optional } from './env.ts';
 import { readSession, type Session } from './session.ts';
+import { toPublicServices, type DoctorService, type PublicService } from './services.ts';
 import type { Shift } from './slots.ts';
 
 export type DoctorRecord = {
@@ -25,6 +26,8 @@ export type DoctorRecord = {
   rating_count?: number;
   /** Yosh cheklovi: 'all' | 'adult' (16+) | 'child' (16 gacha). */
   age_group?: string;
+  /** Qo'shimcha xizmatlar (massaj, UZI, qayta ko'rik ...); asosiy qabul — `price`. */
+  services?: DoctorService[];
 };
 
 /** Saytga (bron vidjeti, jamoa) ko'rsatiladigan shifokor shakli. */
@@ -45,6 +48,8 @@ export type PublicDoctor = {
   ratingCount: number;
   /** Yosh cheklovi — bron vidjeti bemorni shunga qarab filtrlaydi. */
   ageGroup: AgeGroup;
+  /** Qo'shimcha xizmatlar; bo'sh bo'lsa vidjet xizmat tanlovini ko'rsatmaydi. */
+  services: PublicService[];
 };
 
 /** Ko'rinadigan (yashirilmagan) baholar bo'yicha o'rtacha. */
@@ -74,6 +79,7 @@ export const toPublicDoctor = (d: DoctorRecord): PublicDoctor => ({
   workdays: d.workdays,
   price: d.price,
   ageGroup: toAgeGroup(d.age_group),
+  services: toPublicServices(d.services),
   ...ratingOf(d),
 });
 

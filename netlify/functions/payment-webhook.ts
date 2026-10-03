@@ -291,15 +291,25 @@ async function performTx(
     o'tgan bo'lsa ham. Slotni boshqa bemor olib ulgurgan bo'lsa —
     shart buziladi va pul yechilmaydi (-31008).
   */
+  /*
+    To'langan summa va lahza navbatning o'ziga yoziladi: 1C uni `PrepaidAmount`
+    ga oladi. Holat keyin `done` / `no_show` ga o'tib "paid" yo'qolsa ham
+    ma'lumot qoladi (lib/appointments.ts, paid_amount).
+  */
   try {
     await db.send(
       new UpdateCommand({
         TableName: TABLES.appointments,
         Key: { doctor_day: doctorDayKey(order.doctor_id, order.date), time: order.time },
-        UpdateExpression: 'SET #s = :paid REMOVE hold_until',
+        UpdateExpression: 'SET #s = :paid, paid_amount = :amount, paid_at = :at REMOVE hold_until',
         ConditionExpression: 'payment_id = :pid',
         ExpressionAttributeNames: { '#s': 'status' },
-        ExpressionAttributeValues: { ':paid': 'paid', ':pid': order.payment_id },
+        ExpressionAttributeValues: {
+          ':paid': 'paid',
+          ':amount': order.amount,
+          ':at': new Date().toISOString(),
+          ':pid': order.payment_id,
+        },
       }),
     );
   } catch (err) {
@@ -343,7 +353,8 @@ async function cancelTx(
         new UpdateCommand({
           TableName: TABLES.appointments,
           Key: { doctor_day: doctorDayKey(order.doctor_id, order.date), time: order.time },
-          UpdateExpression: 'SET #s = :cancelled, hold_until = :zero',
+          // Pul qaytarilgan bo'lsa to'lov izi ham olib tashlanadi (bekor qilingan navbatda qolmasin).
+          UpdateExpression: 'SET #s = :cancelled, hold_until = :zero REMOVE paid_amount, paid_at',
           ConditionExpression: 'payment_id = :pid',
           ExpressionAttributeNames: { '#s': 'status' },
           ExpressionAttributeValues: {

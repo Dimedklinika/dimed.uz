@@ -45,53 +45,69 @@ export function fitsAgeGroup(group: AgeGroup, age: number | null): boolean {
   return group === 'adult' ? age >= AGE_LIMIT : age < AGE_LIMIT;
 }
 
-type Texts = { chip: string; rejected: string; adminLabel: string };
+/*
+  `chip` — shifokor kartasidagi belgi. Faqat "16+" yoki "under 16" yozilsa
+  tushunarsiz edi (bemorlar "nima 16+?" deb so'rashdi), shuning uchun
+  kim uchunligi so'z bilan aytiladi: "Kattalar" / "Bolalar" va yosh chegarasi.
+  `unfit` — bemor shifokorga mos kelmaganda ro'yxatda qisqa izoh.
+*/
+type Texts = { chip: string; rejected: string; adminLabel: string; unfit: string };
 
 const TEXTS: Record<Lang, Record<AgeGroup, Texts>> = {
   uz: {
-    all: { chip: '', rejected: '', adminLabel: 'Hamma yosh' },
+    all: { chip: '', rejected: '', adminLabel: 'Hamma yosh', unfit: '' },
     adult: {
-      chip: `${AGE_LIMIT}+ yosh`,
+      chip: `Kattalar · ${AGE_LIMIT}+`,
       rejected: `Bu shifokor faqat ${AGE_LIMIT} yoshdan katta bemorlarni qabul qiladi.`,
       adminLabel: `${AGE_LIMIT} yoshdan katta`,
+      unfit: `faqat ${AGE_LIMIT} yoshdan katta`,
     },
     child: {
-      chip: `${AGE_LIMIT} yoshgacha`,
+      chip: `Bolalar · ${AGE_LIMIT} yoshgacha`,
       rejected: `Bu shifokor faqat ${AGE_LIMIT} yoshgacha bo‘lgan bemorlarni qabul qiladi.`,
       adminLabel: `${AGE_LIMIT} yoshgacha`,
+      unfit: `faqat ${AGE_LIMIT} yoshgacha`,
     },
   },
   ru: {
-    all: { chip: '', rejected: '', adminLabel: 'Любой возраст' },
+    all: { chip: '', rejected: '', adminLabel: 'Любой возраст', unfit: '' },
     adult: {
-      chip: `${AGE_LIMIT}+ лет`,
+      chip: `Взрослые · ${AGE_LIMIT}+`,
       rejected: `Этот врач принимает только пациентов старше ${AGE_LIMIT} лет.`,
       adminLabel: `Старше ${AGE_LIMIT} лет`,
+      unfit: `только с ${AGE_LIMIT} лет`,
     },
     child: {
-      chip: `до ${AGE_LIMIT} лет`,
+      chip: `Дети · до ${AGE_LIMIT} лет`,
       rejected: `Этот врач принимает только пациентов до ${AGE_LIMIT} лет.`,
       adminLabel: `До ${AGE_LIMIT} лет`,
+      unfit: `только до ${AGE_LIMIT} лет`,
     },
   },
   en: {
-    all: { chip: '', rejected: '', adminLabel: 'Any age' },
+    all: { chip: '', rejected: '', adminLabel: 'Any age', unfit: '' },
     adult: {
-      chip: `${AGE_LIMIT}+`,
+      chip: `Adults · ${AGE_LIMIT}+`,
       rejected: `This doctor sees patients aged ${AGE_LIMIT} and older only.`,
       adminLabel: `${AGE_LIMIT} and older`,
+      unfit: `${AGE_LIMIT} and older only`,
     },
     child: {
-      chip: `under ${AGE_LIMIT}`,
+      chip: `Children · under ${AGE_LIMIT}`,
       rejected: `This doctor sees patients under ${AGE_LIMIT} only.`,
       adminLabel: `Under ${AGE_LIMIT}`,
+      unfit: `under ${AGE_LIMIT} only`,
     },
   },
 };
 
-/** Shifokor kartasidagi qisqa belgi; cheklovsiz bo'lsa bo'sh satr. */
+/** Shifokor kartasidagi qisqa belgi ("Kattalar · 16+"); cheklovsiz bo'lsa bo'sh satr. */
 export const ageChip = (group: AgeGroup, lang: Lang = 'uz'): string =>
   (TEXTS[lang] ?? TEXTS.uz)[group].chip;
+
+/** Bemor ro'yxatida mos kelmaganlarga qisqa izoh ("faqat 16 yoshdan katta"). */
+export const ageUnfit = (group: AgeGroup, lang: Lang = 'uz'): string =>
+  (TEXTS[lang] ?? TEXTS.uz)[group].unfit;
 
 /** "Bu shifokor faqat …" — bemor mos kelmaganda. */
 export const ageRejected = (group: AgeGroup, lang: Lang = 'uz'): string =>

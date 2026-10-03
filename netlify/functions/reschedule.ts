@@ -5,7 +5,7 @@ import { db, TABLES } from './lib/db.ts';
 import { sessionFrom, getDoctor } from './lib/auth.ts';
 import { doctorDayKey, isValidSlot, isBookable } from './lib/slots.ts';
 import { shiftsFor } from './lib/schedule.ts';
-import { isConfirmed, type Appointment } from './lib/appointments.ts';
+import { isConfirmed, followupCheck, followupRejected, type Appointment } from './lib/appointments.ts';
 import { isDateKey, isTime, toInstant, weekdayOf } from './lib/time.ts';
 import { sendMessage, logToAdmin, escapeHtml } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
@@ -87,6 +87,26 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       return error('Qabulga 1 soatdan kam qoldi — boshqa vaqtni tanlang');
     }
 
+    /*
+      Qayta ko'rik muddati ko'chirishda ham saqlanadi: yaqin kunga olib,
+      keyin uzoq kunga surib bo'lmaydi. Shifokor xizmatni olib tashlagan
+      bo'lsa (yoki muddatsiz qilgan bo'lsa) tekshirilmaydi — bron kuchda qoladi.
+    */
+    if (appointment.service_followup) {
+      const service = doctor.services?.find((s) => s.id === appointment.service_id);
+      if (service?.followup_days) {
+        const check = await followupCheck(
+          appointment.phone,
+          doctorId,
+          appointment.patient_id,
+          service.followup_days,
+          toDate,
+          now,
+        );
+        if (!check.ok) return error(followupRejected(service.name, service.followup_days, check));
+      }
+    }
+
     // 1-qadam: yangi slotni atomik egallaymiz (bron bilan bir xil shart).
     try {
       await db.send(
@@ -107,7 +127,16 @@ export default async (request: Request, _context: Context): Promise<Response> =>
             starts_at: toInstant(toDate, toTime).toISOString(),
             status: appointment.status,
             price: appointment.price,
+            // Tanlangan xizmat va sinov izi yangi vaqtga ham ko'chadi.
+            service_id: appointment.service_id,
+            service_name: appointment.service_name,
+            service_code: appointment.service_code,
+            service_followup: appointment.service_followup,
+            payment_skipped_by: appointment.payment_skipped_by,
             payment_id: appointment.payment_id,
+            // Onlayn to'langan summa yangi vaqtga ham ko'chadi (1C PrepaidAmount uchun).
+            paid_amount: appointment.paid_amount,
+            paid_at: appointment.paid_at,
             moved_from: `${date} ${time}`,
             created_at: appointment.created_at,
             updated_at: now.toISOString(),

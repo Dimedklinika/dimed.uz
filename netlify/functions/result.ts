@@ -1,8 +1,8 @@
 import type { Context } from '@netlify/functions';
 import { sessionFrom } from './lib/auth.ts';
 import { findResult } from './lib/results.ts';
-import { createShareToken, readShareToken } from './lib/share.ts';
-import { optional } from './lib/env.ts';
+import { createShareToken, createVerifyToken, readShareToken } from './lib/share.ts';
+import { siteOrigin } from './lib/site.ts';
 import { logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 import { hitLimit, tooMany, clientIp } from './lib/rate-limit.ts';
@@ -39,7 +39,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       if (!shared) return error('Havola yaroqsiz yoki muddati o‘tgan', 404);
       const result = await findResult(shared.phone, shared.id);
       if (!result) return error('Natija topilmadi', 404);
-      return json({ result, shared: true }, 200, noStore);
+      return json({ result: withVerifyUrl(request, shared.phone, result), shared: true }, 200, noStore);
     }
 
     if (!id) return error('id yoki t parametri kerak');
@@ -54,19 +54,24 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       return json({ url: shareUrl(request, session.phone, id) }, 200, noStore);
     }
 
-    return json({ result, shared: false }, 200, noStore);
+    return json({ result: withVerifyUrl(request, session.phone, result), shared: false }, 200, noStore);
   } catch (err) {
     await logToAdmin('result', err);
     return error('Natijani olishda xatolik', 500);
   }
 };
 
-/** Sayt manzili: SITE_URL sozlamasi, bo'lmasa so'rov kelgan manzil. */
-export const siteOrigin = (request?: Request): string => {
-  const configured = optional('SITE_URL').trim().replace(/\/$/, '');
-  if (configured) return configured;
-  return request ? new URL(request.url).origin : 'https://dimed.uz';
-};
+// Avval shu yerda edi — boshqa funksiyalar (lc-results, notify-results) shu yo'ldan import qiladi.
+export { siteOrigin };
+
+/**
+ * PDF dagi QR kod havolasi (`/tekshirish`). Natijaga qo'shiladi — brauzer
+ * PDF'ni yasayotganda shuni QR ga aylantiradi.
+ */
+const withVerifyUrl = <T extends { id: string }>(request: Request, phone: string, result: T) => ({
+  ...result,
+  verifyUrl: `${siteOrigin(request)}/tekshirish?v=${createVerifyToken(phone, result.id)}`,
+});
 
 export const shareUrl = (request: Request | undefined, phone: string, id: string): string =>
   `${siteOrigin(request)}/natija?t=${createShareToken(phone, id)}`;

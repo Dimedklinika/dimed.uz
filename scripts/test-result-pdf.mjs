@@ -18,7 +18,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const libDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'lib');
-const { buildResultDocDefinition, fileSlug } = await import(
+const { buildResultDocDefinition, fileSlug, gaugePosition, parseNumber } = await import(
   pathToFileURL(join(libDir, 'result-pdf.ts')).href
 );
 
@@ -41,6 +41,10 @@ function collectText(node, out = []) {
     return out;
   }
   if (typeof node === 'object') {
+    // Matn bo'lmagan tuguns: logotip (SVG), shkala (canvas), QR — belgi qoldiramiz.
+    if (typeof node.svg === 'string') out.push('[SVG]');
+    if (node.canvas) out.push('[CANVAS]');
+    if (typeof node.qr === 'string') out.push(`[QR ${node.qr}]`);
     if (typeof node.text !== 'undefined') collectText(node.text, out);
     if (node.stack) collectText(node.stack, out);
     if (node.columns) collectText(node.columns, out);
@@ -148,6 +152,77 @@ test('holatlar tanlangan tilda ko\'rinadi', () => {
 test('fayl nomi slug — modifikator apostrofsiz', () => {
   assert.equal(fileSlug('Yoʻldoshev Anvar'), 'Yoldoshev_Anvar');
   assert.equal(fileSlug(''), 'bemor');
+});
+
+test('haqiqiy logotip (SVG vektor) bor — oddiy matn emas', () => {
+  const dd = buildResultDocDefinition(cbc, 'uz');
+  assert.ok(allText(dd).includes('[SVG]'));
+  const svg = dd.content.flatMap((n) => n.columns ?? []).flatMap((c) => c.stack ?? []).find((n) => n.svg);
+  assert.ok(svg.svg.startsWith('<svg'), 'SVG satri');
+  assert.ok(!svg.svg.includes('<style'), 'pdfmake <style> sinflarini bilmaydi — ranglar atributda');
+  assert.ok(svg.svg.includes('#d5006f') && svg.svg.includes('#579b47'), 'brend ranglari');
+});
+
+test('yuborgan shifokor bo\'lmasa uning katagi umuman chiqmaydi', () => {
+  const upper = (dd) => allText(dd).toUpperCase();
+  assert.ok(upper(buildResultDocDefinition(cbc, 'uz')).includes('YUBORGAN SHIFOKOR'));
+  assert.ok(allText(buildResultDocDefinition(cbc, 'uz')).includes('Ashurov B.'));
+  for (const doctor of [null, '', '   ']) {
+    const dd = buildResultDocDefinition({ ...cbc, doctor }, 'uz');
+    assert.ok(!upper(dd).includes('YUBORGAN SHIFOKOR'), `doctor=${JSON.stringify(doctor)}`);
+    // Namuna ma'lumoti butun qatorni egallaydi (2 ustunga cho'ziladi).
+    const sampleCell = dd.content.find((n) => n.table?.widths?.length === 2).table.body[1][0];
+    assert.equal(sampleCell.colSpan, 2);
+  }
+});
+
+test('shkala: me\'yor oralig\'i o\'rtada, nuqta qiymatga qarab (sahifadagi bilan bir xil)', () => {
+  const at = (v) => gaugePosition(v, 3.9, 5.6);
+  assert.ok(Math.abs(at(4.75) - 50) < 1e-9, 'oraliq o\'rtasi — 50 %');
+  assert.ok(Math.abs(at(3.9) - 25) < 1e-9, 'pastki chegara — 25 %');
+  assert.ok(Math.abs(at(5.6) - 75) < 1e-9, 'yuqori chegara — 75 %');
+  assert.equal(at(-10), 2, 'chekkadan chiqsa qisqartiriladi');
+  assert.equal(at(99), 98);
+  assert.equal(gaugePosition(null, 3.9, 5.6), null, 'qiymat son emas');
+  assert.equal(gaugePosition(4, null, 5.6), null, 'pastki chegara yo\'q');
+  assert.equal(gaugePosition(4, 5.6, 3.9), null, 'chegaralar teskari');
+  assert.equal(parseNumber('5,2'), 5.2);
+  assert.equal(parseNumber('<0.5'), 0.5);
+  assert.equal(parseNumber('manfiy'), null);
+});
+
+test('vizual ko\'rsatkich (shkala) faqat sonli qiymat va me\'yori borlarga chiziladi', () => {
+  const canvasCount = (result) =>
+    allText(buildResultDocDefinition(result, 'uz')).split('[CANVAS]').length - 1;
+  // Sarlavhadagi ajratuvchi chiziq ham canvas — hisobdan chiqarib tashlaymiz.
+  const base = canvasCount(cbc);
+  assert.equal(base, 1, 'me\'yor chegarasi yo\'q — shkala yo\'q (faqat ajratuvchi chiziq)');
+
+  const withRefs = {
+    ...cbc,
+    items: cbc.items.map((i, k) => ({
+      ...i,
+      refLow: 3.9,
+      refHigh: 5.6,
+      value: k === 0 ? 'musbat' : i.value,
+    })),
+  };
+  assert.equal(canvasCount(withRefs) - base, cbc.items.length - 1, 'matnli qiymatga shkala chizilmaydi');
+  assert.ok(allText(buildResultDocDefinition(withRefs, 'uz')).toUpperCase().includes('VIZUAL'), 'ustun sarlavhasi bor');
+});
+
+test('QR kod tekshirish havolasi bilan; havola bo\'lmasa QR yo\'q', () => {
+  const url = 'https://dimed.uz/tekshirish?v=abc.def';
+  assert.ok(allText(buildResultDocDefinition({ ...cbc, verifyUrl: url }, 'uz')).includes(`[QR ${url}]`));
+  assert.ok(!allText(buildResultDocDefinition(cbc, 'uz')).includes('[QR'));
+  assert.ok(!allText(buildResultDocDefinition({ ...cbc, verifyUrl: null }, 'uz')).includes('[QR'));
+  assert.ok(allText(buildResultDocDefinition({ ...cbc, verifyUrl: url }, 'ru')).includes('QR'), 'izoh ruscha ham');
+});
+
+test('birlik faqat sonli qiymatga yoziladi ("manfiy g/L" chiqmaydi)', () => {
+  const item = (value) => ({ title: 'Oqsil', value, unit: 'g/L', reference: null, status: null });
+  assert.ok(!allText(buildResultDocDefinition({ ...cbc, items: [item('manfiy')] }, 'uz')).includes('g/L'));
+  assert.ok(allText(buildResultDocDefinition({ ...cbc, items: [item('5.2')] }, 'uz')).includes('g/L'));
 });
 
 console.log(`\n${passed} ta tekshiruv o'tdi.`);
