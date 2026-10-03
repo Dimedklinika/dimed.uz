@@ -16,6 +16,9 @@ const { normalizePhone } = await load('http.ts');
 const { tableName, awsCredentials } = await load('env.ts');
 const { escapeHtml } = await load('telegram.ts');
 const { botText } = await load('i18n.ts');
+const { createVerifyToken, readVerifyToken, createShareToken } = await load('share.ts');
+const srcLib = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'lib');
+const { ageChip, ageUnfit } = await import(pathToFileURL(join(srcLib, 'age.ts')).href);
 
 let passed = 0;
 const test = (name, fn) => {
@@ -119,6 +122,48 @@ test('botText qiymatlarni ekranlaydi, shablon teglari saqlanadi', () => {
 
 test('botText berilmagan qiymat joyini o\'zgarishsiz qoldiradi', () => {
   assert.ok(botText('rate.thanks', 'uz', {}).includes('{stars}'));
+});
+
+test('kirish kodi xabari uch tilda, kod <code> ichida', () => {
+  for (const [lang, start] of [['uz', 'Saytga kirish kodingiz'], ['ru', 'Код для входа'], ['en', 'Your sign-in code']]) {
+    const text = botText('login.code', lang, { code: '123456' });
+    assert.ok(text.startsWith(start), `${lang}: ${text}`);
+    assert.ok(text.includes('<code>123456</code>'), lang);
+  }
+});
+
+console.log('\nPDF tekshiruv tokeni (QR):');
+test('tekshiruv tokeni aylanib o\'qiladi va QR uchun ixcham', () => {
+  const id = 'lab-2026-03-09T10:15:00';
+  const token = createVerifyToken('+998901234567', id);
+  assert.deepEqual(readVerifyToken(token), { phone: '+998901234567', id });
+  assert.ok(token.length <= 110, `QR kichik chiqishi uchun: ${token.length} belgi`);
+});
+
+test('buzilgan, begona yoki bo\'sh tekshiruv tokeni rad etiladi', () => {
+  const token = createVerifyToken('+998901234567', 'doc-1');
+  const flipped = token.slice(0, -1) + (token.endsWith('A') ? 'B' : 'A');
+  assert.equal(readVerifyToken(flipped), null, 'imzo buzildi');
+  assert.equal(readVerifyToken(createShareToken('+998901234567', 'doc-1')), null, 'ulashish tokeni boshqa maqsadga');
+  for (const bad of [null, undefined, '', 'abc', '.', 'abc.']) assert.equal(readVerifyToken(bad), null, String(bad));
+});
+
+console.log('\nShifokor yosh belgisi:');
+test('belgi kim uchunligini so\'z bilan aytadi ("16+" yolg\'iz emas)', () => {
+  assert.equal(ageChip('adult', 'uz'), 'Kattalar · 16+');
+  assert.equal(ageChip('child', 'uz'), 'Bolalar · 16 yoshgacha');
+  assert.equal(ageChip('adult', 'ru'), 'Взрослые · 16+');
+  assert.equal(ageChip('child', 'ru'), 'Дети · до 16 лет');
+  assert.equal(ageChip('adult', 'en'), 'Adults · 16+');
+  assert.equal(ageChip('child', 'en'), 'Children · under 16');
+  for (const lang of ['uz', 'ru', 'en']) assert.equal(ageChip('all', lang), '', 'cheklovsizda belgi yo\'q');
+});
+
+test('mos kelmagan bemorga izoh har tilda (o\'zbekcha "emas" yopishtirilmaydi)', () => {
+  assert.equal(ageUnfit('adult', 'uz'), 'faqat 16 yoshdan katta');
+  assert.equal(ageUnfit('child', 'ru'), 'только до 16 лет');
+  assert.equal(ageUnfit('child', 'en'), 'under 16 only');
+  assert.equal(ageUnfit('all', 'uz'), '');
 });
 
 console.log('\nAWS kalitlari:');

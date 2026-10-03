@@ -13,6 +13,7 @@ export const GET: APIRoute = ({ site }) =>
       'Disallow: /kabinet',
       'Disallow: /kirish',
       'Disallow: /natija',
+      'Disallow: /tekshirish',
       'Disallow: /api/',
       'Disallow: /.netlify/',
       '',

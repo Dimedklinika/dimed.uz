@@ -45,8 +45,10 @@ yashiradi. Shu tartib navbatlar uchun ham saqlanadi.
 **2026-09-07 dan boshlab** kengaytma tahlil natijasi bilan birga
 `AnalysisName` (tahlil/panel nomi — `Document.AnalysisResult.Analysis`,
 bo'lmasa jadval qismidagi tahlillar nomi) va `Doctor` (yo'naltirgan
-shifokor — `ReferencedPerson`) ni ham yuboradi. Me'yoriy oraliq
-(`ReferenceMin` / `ReferenceMax`) hali qo'shilmagan — 4.3 ga qarang.
+shifokor — `ReferencedPerson`) ni ham yuboradi. **2026-10-02 holati
+(EDT `Info_Dev`, `DynamoSyncCore` 1.1):** analit qatorida me'yoriy oraliq
+(`ReferenceMin` / `ReferenceMax` — sonli, yoki matnli `Reference`), bayroq
+(`Status`: H/L/N) va izoh (`Comment`) ham yuboriladi — 4.3 dagi nomlar tasdiqlandi.
 
 ## 3. DynamoDB tuzilmasi — `phone` / `sort_key`
 
@@ -97,7 +99,21 @@ bilan «shu kundagi barcha shifokorlarning navbatlari».
 | `reminded_at` | S | ISO | Bemorga 1 soat oldin eslatma ketgan lahza |
 | `marked_at` | S | ISO | Shifokor `done` / `no_show` deb belgilagan lahza (E2) |
 | `rating_asked_at`, `rating`, `rated_at` | S, N, S | | Bemor bahosi (G2); 1C uchun ixtiyoriy |
+| `service_id` | S | `massaj` | Faqat qo'shimcha xizmat tanlanganda (asosiy qabulda yo'q); shifokordagi `services[].id` |
+| `service_name` | S | `Massaj` | Xizmat nomi (bron paytidagi) |
+| `service_code` | S | `00123` | **1C `Catalog.GoodsAndServices` kodi** — admin panelda xizmat qatoriga yozilgan; kod yozilmagan bo'lsa maydon yo'q. 1C `DynamoSyncBookings.ServiceFor` shu bo'yicha xizmatni topadi |
+| `service_followup` | BOOL | `true` | Xizmat «qayta ko'rik» (`qayta:N`) — shu shifokorga oddiy qabulga kelgan bemorga, qabuldan keyin N kun ichida (necha marta bo'lsa ham) |
+| `payment_skipped_by` | S | `39707325` | Administrator sinov bron uchun to'lovni o'tkazib yuborgan (Telegram ID) |
+| `paid_amount` | N | `70000` | **Onlayn to'langan summa (so'm)** — Payme to'lovni tasdiqlaganda yoziladi; holat keyin `done`/`no_show` ga o'tsa ham qoladi; pul qaytarilsa olib tashlanadi. Klinikada to'lanadigan va bepul navbatda yo'q. 1C `DoctorsAdmission.PrepaidAmount` ni shundan to'ldiradi |
+| `paid_at` | S | ISO | To'lov tasdiqlangan lahza |
 | `created_at`, `updated_at` | S | ISO | |
+
+`price` — tanlangan xizmatning narxi (asosiy qabulda shifokor narxi); `0` — bepul.
+**To'lov 1C ga qanday o'tadi:** faqat onlayn to'langan summa — `paid_amount` →
+`DoctorsAdmission.PrepaidAmount` (`DynamoSyncBookings.PaidAmountOf`; maydon bo'lmagan eski
+`paid` navbatda `price` olinadi). Klinikada to'lanadigan navbatda `PrepaidAmount = 0`, narxni
+kassir avvalgidek qo'yadi. `Document.Sales` ni hujjatdan to'ldirishda narx shu maydondan
+olinadi — `docs/1c-tuzatishlar.md`, 5-band. (Onlayn to'lov hozir o'chiq: `PAYMENT_ENABLED`.)
 
 **Holatlar (`status`):**
 
@@ -122,7 +138,8 @@ ko'rinadi. 1C hujjatini yangisiga bog'lash uchun ikkala qatorda ham
 `doctor_id` (S, kalit), `name`, `job`, `dept_id`, `price` (N),
 `slot_minutes` (N, standart 60), `shifts` (L: `{start, end}`),
 `workdays` (L: 0 = yakshanba … 6 = shanba), `active` (BOOL),
-`rating_sum` / `rating_count` (N).
+`rating_sum` / `rating_count` (N), `services` (L: `{id, name, price, code?, followup_days?}` —
+qo'shimcha xizmatlar; admin panelda matn bilan kiritiladi, `netlify/functions/lib/services.ts`).
 
 1C bilan bog'lash uchun `doctor_id` ↔ 1C xodimi mosligi kengaytmada
 **bitta lug'at** (yoki `dimed_doctors.onec_ref` maydoni — 1C o'zi
@@ -249,13 +266,21 @@ va jurnalga yoziladi. Bu ataylab: noto'g'ri shifokorga yozib qo'yishdan
 ko'ra ko'rinadigan bo'shliq yaxshiroq. Saytdagi kodlar ro'yxatini
 `npm run link-doctor` yoki admin panel (`/kabinet/admin`) ko'rsatadi.
 
-**Bemor qanday topiladi:** avval `patient_id` (1C kodi) bo'yicha, keyin
-telefon bo'yicha (oxirgi 9 raqam). Topilmasa navbat o'tkazib yuboriladi
-va jurnalga yoziladi — **yangi karta ochilmaydi**, aks holda saytdan
-kelgan ma'lumot bilan ochilgan karta qo'lda kiritilganiga qo'shilib,
-ikki nusxa paydo bo'lardi. Bunday holatda registrator bemorni o'zi
-bog'laydi (kartani ochib, telefonini to'g'rilaydi — keyingi aylanishda
-navbat o'zi ulanadi).
+**Bemor qanday topiladi** (`DynamoSyncBookings.PatientOf`, 2026-10-03 holati
+— koddan): 1) 1C kodi bo'yicha (`patient_id` raqam bo'lsa; `local-…` bo'lsa
+so'rovsiz o'tkaziladi); 2) `WebID` (saytdagi `patient_id`) bo'yicha; 3) telefon
+(oxirgi 9 raqam) **va ism** bo'yicha — oila a'zolari ajralsin; topilsa unga
+`WebID` yoziladi; 4) hech qayerdan topilmasa **yangi bemor yaratiladi**
+(Jismoniy shaxslar → «Bemorlar» papkasi, `WebID` bilan; ism, tug'ilgan sana va
+telefon saytdagidan; kartaning «Izoh» maydoniga «Onlayn yuklangan» yoziladi) va
+jurnalga yoziladi. 1- va 2-qadam bir-birini kesmaydi (kod — raqam, `WebID` —
+`local-…`), tartib faqat tezlikka ta'sir qiladi.
+
+> Ilgari bu hujjatda «yangi karta ochilmaydi» deyilgan edi — kod esa ochadi.
+> Xavf: ism har xil yozilsa (saytda «Toirov Rozi», 1C da «Toirov Rozimuhammad»)
+> bitta odam ikki kartada bo'lib qolishi mumkin. Registrator `WebID` to'ldirilgan
+> yangi kartalarni vaqti-vaqti bilan ko'zdan kechirsin va takrorini birlashtirsin.
+> Qidiruvning 1-qadami (kod bo'yicha) uchun `docs/1c-tuzatishlar.md`, 2-band.
 
 ### 6.3 Davomat: bemor keldimi-kelmadimi
 

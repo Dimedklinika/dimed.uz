@@ -11,6 +11,7 @@ import {
 } from './lib/schedule.ts';
 import { logToAdmin } from './lib/telegram.ts';
 import { AGE_GROUPS, isAgeGroup, toAgeGroup } from './lib/age.ts';
+import { formatServices, parseServices } from './lib/services.ts';
 import { json, error, normalizePhone } from './lib/http.ts';
 
 /**
@@ -68,6 +69,8 @@ async function listDoctors(): Promise<Response> {
       phone: d.phone ?? '',
       active: d.active !== false,
       ageGroup: toAgeGroup(d.age_group),
+      // Qo'shimcha xizmatlar tahrirlash uchun matn ko'rinishida (qator = xizmat).
+      servicesText: formatServices(d.services),
       // Raqamning o'zi emas, faqat bog'langan-yo'qligi ko'rsatiladi.
       telegramId: d.telegram_id ?? '',
       linked: Boolean(d.telegram_id),
@@ -95,6 +98,8 @@ type DoctorInput = {
   telegramId?: string;
   active?: boolean;
   ageGroup?: string;
+  /** Qo'shimcha xizmatlar: har qatorda "Nomi | narx | 1C kodi | qayta:N" (lib/services.ts). */
+  servicesText?: string;
 };
 
 const slugOk = (s: string) => /^[a-z0-9-]{2,40}$/.test(s);
@@ -177,6 +182,22 @@ async function upsertDoctor(body: DoctorInput): Promise<Response> {
     ':updated': now,
   };
   const removes: string[] = [];
+
+  /*
+    Xizmatlar: faqat "servicesText" kaliti kelganda o'zgaradi (eski mijoz
+    yubormasa mavjudlari saqlanadi). Bo'sh matn — barcha xizmatlarni olib
+    tashlaydi: shifokor yana faqat asosiy qabul bilan qoladi.
+  */
+  if (Object.prototype.hasOwnProperty.call(body, 'servicesText')) {
+    const parsed = parseServices(body.servicesText);
+    if (!parsed.ok) return error(parsed.error);
+    if (parsed.services.length) {
+      sets.push('services = :services');
+      values[':services'] = parsed.services;
+    } else {
+      removes.push('services');
+    }
+  }
 
   // --- Telegram bog'lash: faqat "telegramId" kaliti kelganda o'zgaradi ---
   if (Object.prototype.hasOwnProperty.call(body, 'telegramId')) {

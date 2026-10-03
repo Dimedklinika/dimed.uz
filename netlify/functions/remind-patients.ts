@@ -6,7 +6,8 @@ import { getDoctor } from './lib/auth.ts';
 import { doctorDayKey } from './lib/slots.ts';
 import { appointmentsOnDate, isConfirmed, type Appointment } from './lib/appointments.ts';
 import { toTashkent } from './lib/time.ts';
-import { sendMessage, logToAdmin, escapeHtml } from './lib/telegram.ts';
+import { sendMessage, logToAdmin, escapeHtml, isTransientTelegramError } from './lib/telegram.ts';
+import { cronGuard } from './lib/cron.ts';
 import { json, error } from './lib/http.ts';
 
 /**
@@ -22,8 +23,15 @@ const LEAD_MINUTES = 70;
  * Har bir yozuv bir marta eslatiladi: `reminded_at` shartli yozuv bilan
  * qo'yiladi, shuning uchun ishga tushishlar ustma-ust kelsa ham bemorga
  * ikkita xabar bormaydi.
+ *
+ * Xabar vaqtinchalik sababga ko'ra yetmasa (masalan bot kaliti yaroqsiz)
+ * belgi qaytariladi va keyingi ishga tushishda — oyna tugamaguncha —
+ * qayta uriniladi. Bemor botni bloklagan bo'lsa qayta urinilmaydi.
  */
-export default async (_request: Request, _context: Context): Promise<Response> => {
+export default async (request: Request, _context: Context): Promise<Response> => {
+  const blocked = await cronGuard(request, 'remind-patients', 300);
+  if (blocked) return blocked;
+
   try {
     const now = new Date();
     const until = new Date(now.getTime() + LEAD_MINUTES * 60_000);
@@ -54,7 +62,9 @@ export default async (_request: Request, _context: Context): Promise<Response> =
         const doctor = await getDoctor(appointment.doctor_id);
         names.set(appointment.doctor_id, doctor?.name ?? 'Shifokor');
       }
-      if (await remind(appointment, names.get(appointment.doctor_id) ?? 'Shifokor')) sent++;
+      const outcome = await remind(appointment, names.get(appointment.doctor_id) ?? 'Shifokor');
+      if (outcome === 'sent') sent++;
+      else if (outcome === 'retry') await unmarkReminded(appointment, now);
     }
 
     return json({ ok: true, checked: rows.length, due: due.length, sent });
@@ -89,8 +99,38 @@ async function markReminded(appointment: Appointment, now: Date): Promise<boolea
   }
 }
 
-async function remind(appointment: Appointment, doctorName: string): Promise<boolean> {
-  if (!appointment.telegram_id) return false;
+/**
+ * Xabar yetmadi — belgini qaytaradi, keyingi ishga tushishda qayta uriniladi.
+ * Faqat o'zimiz qo'ygan belgi olinadi (`:now` mos bo'lsa).
+ */
+async function unmarkReminded(appointment: Appointment, now: Date): Promise<void> {
+  try {
+    await db.send(
+      new UpdateCommand({
+        TableName: TABLES.appointments,
+        Key: {
+          doctor_day: doctorDayKey(appointment.doctor_id, appointment.date),
+          time: appointment.time,
+        },
+        UpdateExpression: 'REMOVE reminded_at',
+        ConditionExpression: 'reminded_at = :now',
+        ExpressionAttributeValues: { ':now': now.toISOString() },
+      }),
+    );
+  } catch (err) {
+    if (err instanceof ConditionalCheckFailedException) return;
+    await logToAdmin('remind-patients/qaytarish', err);
+  }
+}
+
+/**
+ * `sent` — yuborildi; `skip` — yuboradigan joy yo'q (Telegram hisobi yo'q
+ * yoki bemor botni bloklagan); `retry` — vaqtinchalik xato, keyin qayta urinish.
+ */
+type Outcome = 'sent' | 'skip' | 'retry';
+
+async function remind(appointment: Appointment, doctorName: string): Promise<Outcome> {
+  if (!appointment.telegram_id) return 'skip';
 
   try {
     await sendMessage(
@@ -101,9 +141,9 @@ async function remind(appointment: Appointment, doctorName: string): Promise<boo
         `Iltimos, 10 daqiqa oldin keling. Vaqtni ko'chirish endi mumkin emas — ` +
         `kela olmasangiz qabulxonaga qo'ng'iroq qiling.`,
     );
-    return true;
+    return 'sent';
   } catch (err) {
     await logToAdmin('remind-patients/xabar', err);
-    return false;
+    return isTransientTelegramError(err) ? 'retry' : 'skip';
   }
 }

@@ -1,0 +1,172 @@
+---
+import Base from '../layouts/Base.astro';
+import { t } from '../data/i18n';
+
+/*
+  Hujjatni tekshirish (PDF dagi QR kod). Sessiyasiz ochiladi: QR ni
+  xodim, ish beruvchi yoki sug'urta skanerlaydi. Faqat "hujjat bor va
+  bekor qilinmagan" deyiladi; natija qiymatlari ko'rsatilmaydi
+  (/api/verify, netlify/functions/verify.ts). Indekslanmaydi.
+  Matn serverda o'zbekcha yoziladi, brauzerda tanlangan tilga almashadi.
+*/
+const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
+---
+
+<Base title={uz('verify.title')} description={uz('verify.description')} previewImage={false}>
+  <meta slot="head" name="robots" content="noindex, nofollow" />
+
+  <section class="wrap page">
+    <div class="card glass">
+      <div class="eyebrow">Dimed klinikasi · Laboratoriya</div>
+      <h1 data-t="verify.heading">{uz('verify.heading')}</h1>
+
+      <p class="state" id="state" role="status" aria-live="polite" data-t="verify.checking">{uz('verify.checking')}</p>
+
+      <div id="verdict" hidden>
+        <p class="badge" id="badge"></p>
+        <p class="lede" id="verdictText"></p>
+
+        <dl class="facts" id="facts" hidden>
+          <div><dt data-t="verify.field.title">{uz('verify.field.title')}</dt><dd id="fTitle"></dd></div>
+          <div><dt data-t="verify.field.date">{uz('verify.field.date')}</dt><dd id="fDate"></dd></div>
+          <div><dt data-t="verify.field.patient">{uz('verify.field.patient')}</dt><dd id="fPatient"></dd></div>
+          <div><dt data-t="verify.field.birth">{uz('verify.field.birth')}</dt><dd id="fBirth"></dd></div>
+        </dl>
+
+        <p class="privacy" id="privacy" hidden data-t="verify.privacy">{uz('verify.privacy')}</p>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import { t } from '../data/i18n';
+  import { getLang, applyPageLang } from '../lib/lang';
+  import { resultTitle } from '../lib/result-title';
+
+  type Verdict = {
+    valid: boolean;
+    title?: string;
+    titleKey?: string | null;
+    date?: string;
+    patient?: string | null;
+    birthYear?: string | null;
+  };
+
+  const lang = getLang();
+  applyPageLang(lang);
+  const tr = (key: Parameters<typeof t>[0]) => t(key, lang);
+  const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+  /** "2026-08-21T14:30:00" → "21.08.2026". */
+  const fmtDate = (iso: string): string => {
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[3]}.${m[2]}.${m[1]}` : iso;
+  };
+
+  function show(valid: boolean, data?: Verdict): void {
+    el('state').hidden = true;
+    el('verdict').hidden = false;
+
+    const badge = el('badge');
+    badge.textContent = tr(valid ? 'verify.valid' : 'verify.invalid');
+    badge.className = `badge ${valid ? 'ok' : 'bad'}`;
+    el('verdictText').textContent = tr(valid ? 'verify.validText' : 'verify.invalidText');
+
+    if (!valid || !data) return;
+    el('fTitle').textContent = resultTitle({ title: data.title ?? '', titleKey: data.titleKey ?? undefined }, lang);
+    el('fDate').textContent = data.date ? fmtDate(data.date) : '—';
+    el('fPatient').textContent = data.patient ?? '—';
+    el('fBirth').textContent = data.birthYear ?? '—';
+    el('facts').hidden = false;
+    el('privacy').hidden = false;
+  }
+
+  async function check(): Promise<void> {
+    const token = new URLSearchParams(location.search).get('v');
+    if (!token) return show(false);
+
+    try {
+      const res = await fetch(`/api/verify?v=${encodeURIComponent(token)}`);
+      if (res.status === 404) return show(false);
+      if (!res.ok) throw new Error(String(res.status));
+      show(true, (await res.json()) as Verdict);
+    } catch {
+      el('state').textContent = tr('common.error.network');
+    }
+  }
+
+  void check();
+</script>
+
+<style>
+  .page {
+    padding: var(--section-pad) 0;
+    display: flex;
+    justify-content: center;
+  }
+
+  .card {
+    border-radius: 22px;
+    padding: var(--sp-5);
+    max-width: 520px;
+    width: 100%;
+  }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 750;
+  }
+
+  .state,
+  .lede,
+  .privacy {
+    color: var(--muted);
+    font-size: 15px;
+    margin-top: 12px;
+    line-height: 1.5;
+  }
+
+  .privacy {
+    font-size: 12.5px;
+  }
+
+  .badge {
+    margin-top: 16px;
+    font-size: 20px;
+    font-weight: 750;
+  }
+
+  .badge.ok {
+    color: var(--leaf);
+  }
+
+  .badge.bad {
+    color: var(--rose);
+  }
+
+  .facts {
+    display: grid;
+    gap: 8px;
+    margin: 16px 0 0;
+  }
+
+  .facts div {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .facts dt {
+    color: var(--muted);
+    font-size: 13.5px;
+  }
+
+  .facts dd {
+    margin: 0;
+    font-weight: 650;
+    text-align: right;
+  }
+</style>

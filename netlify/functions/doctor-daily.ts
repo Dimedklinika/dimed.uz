@@ -6,7 +6,8 @@ import { getDoctor } from './lib/auth.ts';
 import { appointmentsOnDate, isConfirmed, type Appointment } from './lib/appointments.ts';
 import { maskPhone } from './lib/schedule.ts';
 import { toTashkent, type DateKey } from './lib/time.ts';
-import { sendMessage, logToAdmin } from './lib/telegram.ts';
+import { sendMessage, logToAdmin, isTransientTelegramError } from './lib/telegram.ts';
+import { cronGuard } from './lib/cron.ts';
 import { json, error } from './lib/http.ts';
 
 /**
@@ -15,8 +16,15 @@ import { json, error } from './lib/http.ts';
  *
  * Navbati yo'q shifokorga xabar yuborilmaydi — bo'sh kun haqidagi
  * kundalik xabar foydadan ko'ra shovqin.
+ *
+ * Xabar vaqtinchalik sababga ko'ra yetmasa (masalan bot kaliti yaroqsiz)
+ * "yuborildi" belgisi qaytariladi — kalit tuzalgach keyingi chaqiruv
+ * xulosani yuboradi.
  */
-export default async (_request: Request, _context: Context): Promise<Response> => {
+export default async (request: Request, _context: Context): Promise<Response> => {
+  const blocked = await cronGuard(request, 'doctor-daily', 3600);
+  if (blocked) return blocked;
+
   try {
     const today = toTashkent(new Date()).dateKey;
     const rows = (await appointmentsOnDate(today)).filter(isConfirmed);
@@ -34,13 +42,15 @@ export default async (_request: Request, _context: Context): Promise<Response> =
       if (!doctor?.telegram_id) continue;
 
       // Bir kunga bitta xulosa — cron takror ishga tushsa ham.
-      if (!(await markSent(doctorId, today))) continue;
+      const mark = await markSent(doctorId, today);
+      if (!mark) continue;
 
       try {
         await sendMessage(doctor.telegram_id, summary(today, appointments));
         sent++;
       } catch (err) {
         await logToAdmin('doctor-daily/xabar', err);
+        if (isTransientTelegramError(err)) await unmarkSent(doctorId, today, mark);
       }
     }
 
@@ -53,8 +63,12 @@ export default async (_request: Request, _context: Context): Promise<Response> =
 
 export const config: Config = { schedule: '0 2 * * *' };
 
-/** Xulosa yuborilganini belgilaydi. false — bugun allaqachon yuborilgan. */
-async function markSent(doctorId: string, date: DateKey): Promise<boolean> {
+/**
+ * Xulosa yuborilganini belgilaydi va qo'yilgan belgini qaytaradi.
+ * `null` — bugun allaqachon yuborilgan.
+ */
+async function markSent(doctorId: string, date: DateKey): Promise<string | null> {
+  const stamp = new Date().toISOString();
   try {
     await db.send(
       new UpdateCommand({
@@ -62,13 +76,31 @@ async function markSent(doctorId: string, date: DateKey): Promise<boolean> {
         Key: { doctor_id: doctorId, date },
         UpdateExpression: 'SET summary_sent_at = :now',
         ConditionExpression: 'attribute_not_exists(summary_sent_at)',
-        ExpressionAttributeValues: { ':now': new Date().toISOString() },
+        ExpressionAttributeValues: { ':now': stamp },
       }),
     );
-    return true;
+    return stamp;
   } catch (err) {
-    if (err instanceof ConditionalCheckFailedException) return false;
+    if (err instanceof ConditionalCheckFailedException) return null;
     throw err;
+  }
+}
+
+/** Xabar yetmadi — o'zimiz qo'ygan belgini olib tashlaydi (keyingi chaqiruv qayta urinadi). */
+async function unmarkSent(doctorId: string, date: DateKey, stamp: string): Promise<void> {
+  try {
+    await db.send(
+      new UpdateCommand({
+        TableName: TABLES.schedules,
+        Key: { doctor_id: doctorId, date },
+        UpdateExpression: 'REMOVE summary_sent_at',
+        ConditionExpression: 'summary_sent_at = :now',
+        ExpressionAttributeValues: { ':now': stamp },
+      }),
+    );
+  } catch (err) {
+    if (err instanceof ConditionalCheckFailedException) return;
+    await logToAdmin('doctor-daily/qaytarish', err);
   }
 }
 

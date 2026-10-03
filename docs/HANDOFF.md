@@ -284,6 +284,38 @@ bilan qayta hosil qilinadi.
 - **Region:** kodda standart region `us-east-1` ga o'zgartirildi —
   jadvallar o'sha yerda.
 
+### 10-bosqich — xabarlar ishonchliligi, PDF, kirish ✅ (2026-10-02)
+Batafsil: `docs/YANGILANISH-2026-10-02.md`; 1C yamoqlari: `docs/1c-tuzatishlar.md`.
+- **Cron:** `lib/cron.ts` (`cronGuard`) — begona so'rov oynada bir marta, Netlify
+  rejalashtiruvchisi va `CRON_SECRET` cheklanmaydi.
+- **Yo'qolmaydigan xabarlar:** `TelegramError` / `isTransientTelegramError` (lib/telegram.ts);
+  `remind-patients`, `doctor-daily`, `ask-ratings`, `notify-results` vaqtinchalik xatoda
+  "yuborildi" belgisini qaytaradi (avval belgi yuborishdan oldin qo'yilib, kalit buzilganda
+  hamma xabar yo'qolardi). Yangi bemorga 3 kundan yangi natija haqida xabar ketadi.
+- **PDF:** logo (`src/lib/pdf-logo.ts`), shkala (canvas), QR → `/tekshirish`
+  (`/api/verify`, `createVerifyToken` — muddatsiz, faqat "bor va bekor qilinmagan").
+- **Kirish:** kod xabari tagida "Saytga kirish" (`/kirish#p=…&c=…`) va "Kodni nusxalash" tugmalari.
+- **Admin:** `skipPayment` (faqat `isAdmin`) — onlayn to'lov yoqilganda ham sinov bron.
+- `lib/site.ts` — `siteOrigin` (netlify.app o'rniga asosiy manzil).
+- **Qo'shimcha xizmatlar va qayta ko'rik:** `lib/services.ts` (`parseServices` / `formatServices` /
+  `resolveService`; admin matn qatori `Nomi | narx | 1C kodi | qayta:N`), `doctors.services`,
+  `book.ts` (`serviceId`, narx xizmatdan, narx 0 → to'lovsiz), `appointments.followupCheck`
+  (qayta ko'rik: shu shifokorga oddiy qabulga kelgan bemorga qabuldan keyin N kun ichida, necha marta
+  bo'lsa ham; muddat faqat oddiy qabuldan sanaladi; `reschedule.ts` ham tekshiradi), vidjetda
+  3-qadamda tanlov. 1C: `DynamoSyncBookings.ServiceFor` (`service_code` → `Catalog.GoodsAndServices`).
+  Ega aytgan: 10 kun, ko'p marta. Tasdiqlanmagan taxmin: «faqat shu shifokorga» — `YANGILANISH-2026-10-02.md`, 1-band.
+- **Telefon ko'rinishi:** `.wrap` yon bo'shlig'i komponentlarning `padding: A 0 B` qoidalaridan
+  himoyalandi (`global.css`, `html .wrap.wrap` — faqat ekranda, ≤1187px); grid ustunlari `minmax(0, …)`;
+  jadvallar telefonda nom + narx. Regressiya testi: `test-e2e.mjs` «Telefon ko'rinishi (360px)».
+- **To'langan summa → 1C:** `payment-webhook.ts` (PerformTransaction) navbatga `paid_amount` (so'm) va
+  `paid_at` yozadi (pul qaytarilsa olib tashlanadi, `reschedule.ts` ko'chiradi); 1C
+  `DynamoSyncBookings.PaidAmountOf` → `DoctorsAdmission.PrepaidAmount`.
+- **Sotuv «Doktorga Qabul» asosida (1C):** `Sales.Filling` — `PaymentMethodNew` faqat `PrepaidAmount > 0`
+  bo'lsa, `Base` = hujjat; `Base` «sarf» bo'lmaganda qarz yopilmaydi (`IsBasedOnExpenditure`);
+  `PrintConsultationPaper` «Navbat» ga `Base.Time` qo'yadi. Tafsilot: `docs/1c-tuzatishlar.md`, 8-band.
+- **Natija `0`:** 1C `AnalysisRowsList` nolni me'yor jadvali quyi chegarasi 0 bo'lgandagina yuboradi.
+- Botda `/id` — Telegram ID (`ADMIN_TELEGRAM_IDS` uchun).
+
 ## Kod tuzilishi
 
 ```

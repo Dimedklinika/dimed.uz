@@ -5,6 +5,7 @@ import { askRating } from './lib/ratings.ts';
 import { DEFAULT_SLOT_MINUTES } from './lib/schedule.ts';
 import { toTashkent, toInstant, addDays } from './lib/time.ts';
 import { logToAdmin } from './lib/telegram.ts';
+import { cronGuard } from './lib/cron.ts';
 import { json, error } from './lib/http.ts';
 
 /**
@@ -20,7 +21,10 @@ import { json, error } from './lib/http.ts';
  */
 const GRACE_MINUTES = 30;
 
-export default async (_request: Request, _context: Context): Promise<Response> => {
+export default async (request: Request, _context: Context): Promise<Response> => {
+  const blocked = await cronGuard(request, 'ask-ratings', 450);
+  if (blocked) return blocked;
+
   try {
     const now = new Date();
     const today = toTashkent(now).dateKey;

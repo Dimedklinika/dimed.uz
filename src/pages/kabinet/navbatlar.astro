@@ -55,6 +55,8 @@ import { t } from '../../data/i18n';
     canMove: boolean;
     /* Navbat kim uchun olingani (bir telefon — bir oila). */
     patientName: string | null;
+    /* Tanlangan qo'shimcha xizmat (massaj, UZI ...); asosiy qabulda yo'q. */
+    serviceName: string | null;
   };
 
   type Slot = { time: string; free: boolean };
@@ -222,12 +224,13 @@ import { t } from '../../data/i18n';
       <div>
         <div class="nm">${esc(a.doctorName)}</div>
         <div class="dt">${esc(a.doctorJob)}</div>
+        ${a.serviceName ? `<div class="dt who">Xizmat: ${esc(a.serviceName)}</div>` : ''}
         <div class="dt">${fmtDate(a.date)} · soat ${a.time}</div>
         ${a.patientName ? `<div class="dt who">Bemor: ${esc(a.patientName)}</div>` : ''}
       </div>
       <div class="appt-foot">
         <span class="pill ${s.cls}">${s.text}</span>
-        <span class="dt">${fmtPrice(a.price)} · kassada</span>
+        <span class="dt">${fmtPrice(a.price)} · ${a.status === 'paid' ? 'onlayn toʻlangan' : 'kassada toʻlanadi'}</span>
       </div>
       ${move}
     </div>`;
@@ -492,7 +495,7 @@ import { t } from '../../data/i18n';
 
   .card :global(.pill) {
     display: inline-block;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     border-radius: 999px;
     padding: 4px 8px;
@@ -582,7 +585,7 @@ import { t } from '../../data/i18n';
     color: var(--muted);
     border-radius: 10px;
     padding: 8px;
-    font-size: 10.5px;
+    font-size: 12px;
     font-weight: 650;
     line-height: 1.25;
     flex-shrink: 0;

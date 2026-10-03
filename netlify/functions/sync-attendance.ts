@@ -7,6 +7,7 @@ import { appointmentKey, matchArrivals, visitsOnDate, type VisitDocument } from 
 import { fromOneCDate } from './lib/results.ts';
 import { addDays, toTashkent, type DateKey } from './lib/time.ts';
 import { logToAdmin } from './lib/telegram.ts';
+import { cronGuard } from './lib/cron.ts';
 import { json, error } from './lib/http.ts';
 
 /**
@@ -36,7 +37,10 @@ const SWEEP_DAYS = 2;
 
 type Marked = 'done' | 'no_show';
 
-export default async (_request: Request, _context: Context): Promise<Response> => {
+export default async (request: Request, _context: Context): Promise<Response> => {
+  const blocked = await cronGuard(request, 'sync-attendance', 300);
+  if (blocked) return blocked;
+
   try {
     const today = toTashkent(new Date()).dateKey;
     const days: DateKey[] = [];

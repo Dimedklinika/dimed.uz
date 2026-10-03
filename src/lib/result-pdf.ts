@@ -20,6 +20,7 @@
 import { t, type Lang, type MessageKey } from '../data/i18n.ts';
 import { resultTitle } from './result-title.ts';
 import { formatBirthDate, ageOf } from './birthdate.ts';
+import { LOGO_SVG } from './pdf-logo.ts';
 
 export type PdfStatus = 'normal' | 'high' | 'low' | null;
 
@@ -28,6 +29,9 @@ export type PdfResultItem = {
   value: string | null;
   unit: string | null;
   reference: string | null;
+  /** Me'yor chegaralari — shkala (vizual ko'rsatkich) uchun; yo'q bo'lsa shkala o'rniga chiziqcha. */
+  refLow?: number | null;
+  refHigh?: number | null;
   status: PdfStatus;
 };
 
@@ -42,6 +46,8 @@ export type PdfResult = {
   biomaterial: string | null;
   sampleId: string | null;
   items: PdfResultItem[];
+  /** Hujjat haqiqiyligini tekshirish havolasi — QR kod bo'lib chiqadi (yo'q bo'lsa QR yo'q). */
+  verifyUrl?: string | null;
 };
 
 /** pdfmake hujjat ta'rifining bizga kerak bo'lgan qismi. */
@@ -71,7 +77,37 @@ const C = {
   warnBg: '#fff6e0',
   rowAlert: '#fff5f9',
   headBg: '#fdf5f9',
+  gaugeTrack: '#efe3ea',
+  gaugeZone: '#cfe8c8',
 } as const;
+
+/** Shkala (vizual ko'rsatkich) kengligi, pt. */
+const GAUGE_W = 58;
+
+/** "5,2" / "1 234.5" / "<0.5" → son; son bo'lmasa null (natija sahifasidagi bilan bir xil). */
+export const parseNumber = (raw: string | null | undefined): number | null => {
+  if (!raw) return null;
+  const cleaned = raw.replace(/\s+/g, '').replace(',', '.').replace(/^[<>≤≥=]+/, '');
+  return /^-?\d+(\.\d+)?$/.test(cleaned) ? Number(cleaned) : null;
+};
+
+/**
+ * Shkaladagi nuqta o'rni, 2–98 %: me'yor oralig'i o'rtada (25–75 %),
+ * chekkalarda qisqartiriladi — natija sahifasidagi shkala bilan aynan bir xil.
+ * Qiymat son bo'lmasa yoki me'yor chegaralari yetmasa — null.
+ */
+export function gaugePosition(
+  value: number | null,
+  low: number | null | undefined,
+  high: number | null | undefined,
+): number | null {
+  if (value === null || low === null || low === undefined) return null;
+  if (high === null || high === undefined || high <= low) return null;
+  const span = high - low;
+  const min = low - span * 0.5;
+  const max = high + span * 0.5;
+  return Math.min(98, Math.max(2, ((value - min) / (max - min)) * 100));
+}
 
 /**
  * O'zbekcha maxsus apostroflar (oʻ/gʻ dagi ʻ, ʼ) → oddiy '.
@@ -117,8 +153,9 @@ export const PDF_FONTS = {
 
 /**
  * Natijadan pdfmake hujjat ta'rifini quradi — toza, tashqi bog'liqliksiz
- * (test qilish uchun). Faqat matn: rasm/canvas ishlatilmaydi, shuning
- * uchun butun hujjat vektor bo'lib qoladi.
+ * (test qilish uchun). Rasm (bitmap) ishlatilmaydi: matn haqiqiy matn,
+ * logotip SVG, shkala `canvas`, QR kod pdfmake'ning o'z QR tuguni —
+ * butun hujjat vektor bo'lib qoladi.
  */
 export function buildResultDocDefinition(result: PdfResult, lang: Lang): PdfDocDefinition {
   const tr = (key: MessageKey, vars?: Record<string, string | number>) => pdfText(t(key, lang, vars));
@@ -148,12 +185,21 @@ export function buildResultDocDefinition(result: PdfResult, lang: Lang): PdfDocD
     .filter(Boolean)
     .join(' · ');
 
+  /*
+    "Yuborgan shifokor" bo'sh bo'lsa katak umuman chiqmaydi (chiziqcha ham
+    emas): namuna ma'lumoti butun qatorni egallaydi.
+  */
+  const doctor = pdfText(result.doctor).trim();
+  const sampleRow = doctor
+    ? [cell(tr('result.sampleTime'), sample), cell(tr('result.doctor'), doctor)]
+    : [{ ...cell(tr('result.sampleTime'), sample), colSpan: 2 }, {}];
+
   const patientTable = {
     table: {
       widths: ['*', '*'],
       body: [
         [cell(tr('result.patient'), pdfText(result.patientName)), cell(tr('result.birthGender'), [birth, gender].filter(Boolean).join(' / '))],
-        [cell(tr('result.sampleTime'), sample), cell(tr('result.doctor'), pdfText(result.doctor))],
+        sampleRow,
       ],
     },
     layout: {
@@ -200,6 +246,24 @@ export function buildResultDocDefinition(result: PdfResult, lang: Lang): PdfDocD
     margin: [4, pad + 1, 4, pad + 1] as [number, number, number, number],
   });
 
+  /** Vizual ko'rsatkich: me'yor oralig'i yashil, nuqta — qiymat (rang holatga qarab). */
+  const gaugeCell = (item: PdfResultItem, fill: string | null, cellMargin: [number, number, number, number]) => {
+    const pos = gaugePosition(parseNumber(item.value), item.refLow, item.refHigh);
+    if (pos === null) {
+      return { text: '—', fontSize: fs, color: C.muted, fillColor: fill, margin: cellMargin };
+    }
+    const dot = item.status === 'high' || item.status === 'low' ? C.danger : item.status === 'normal' ? C.ok : C.muted;
+    return {
+      canvas: [
+        { type: 'rect', x: 0, y: 2.6, w: GAUGE_W, h: 2.8, r: 1.4, color: C.gaugeTrack },
+        { type: 'rect', x: GAUGE_W * 0.25, y: 2.6, w: GAUGE_W * 0.5, h: 2.8, r: 1.4, color: C.gaugeZone },
+        { type: 'ellipse', x: (pos / 100) * GAUGE_W, y: 4, r1: 3.4, r2: 3.4, color: dot },
+      ],
+      fillColor: fill,
+      margin: cellMargin,
+    };
+  };
+
   const bodyRows = result.items.map((item) => {
     const alert = item.status === 'high' || item.status === 'low';
     const fill = alert ? C.rowAlert : null;
@@ -209,7 +273,10 @@ export function buildResultDocDefinition(result: PdfResult, lang: Lang): PdfDocD
       {
         text: [
           { text: pdfText(item.value) || '—', bold: true, color: alert ? C.danger : C.ink },
-          ...(item.unit ? [{ text: ` ${pdfText(item.unit)}`, color: C.muted, fontSize: fs - 1.5 }] : []),
+          // Birlik faqat sonli qiymatga: "manfiy g/L" kabi ma'nosiz yozuv chiqmasin.
+          ...(item.unit && /\d/.test(item.value ?? '')
+            ? [{ text: ` ${pdfText(item.unit)}`, color: C.muted, fontSize: fs - 1.5 }]
+            : []),
         ],
         fontSize: fs,
         fillColor: fill,
@@ -217,6 +284,7 @@ export function buildResultDocDefinition(result: PdfResult, lang: Lang): PdfDocD
       },
       { text: statusText(item.status), fontSize: fs - 0.5, bold: alert, color: statusColor(item.status), fillColor: fill, margin: cellMargin },
       { text: pdfText(item.reference) || '—', fontSize: fs, color: C.ink, fillColor: fill, margin: cellMargin },
+      gaugeCell(item, fill, cellMargin),
     ];
   });
 
@@ -224,9 +292,15 @@ export function buildResultDocDefinition(result: PdfResult, lang: Lang): PdfDocD
     table: {
       headerRows: 1,
       dontBreakRows: true,
-      widths: ['*', 62, 58, 92],
+      widths: ['*', 58, 50, 76, GAUGE_W + 8],
       body: [
-        [headCell(tr('result.col.name')), headCell(tr('result.col.value')), headCell(tr('result.col.status')), headCell(tr('result.col.range'))],
+        [
+          headCell(tr('result.col.name')),
+          headCell(tr('result.col.value')),
+          headCell(tr('result.col.status')),
+          headCell(tr('result.col.range')),
+          headCell(tr('result.col.gauge')),
+        ],
         ...bodyRows,
       ],
     },
@@ -258,6 +332,33 @@ export function buildResultDocDefinition(result: PdfResult, lang: Lang): PdfDocD
     layout: { hLineWidth: () => 0, vLineWidth: () => 0, fillColor: () => '#f7f0f4' },
   };
 
+  /*
+    Hujjat haqiqiyligi: QR kod /tekshirish sahifasiga olib boradi — u
+    hujjat tizimda borligi va bekor qilinmaganini aytadi (natija
+    qiymatlarisiz). Izohning yonida turadi.
+  */
+  const closing = result.verifyUrl
+    ? {
+        columns: [
+          { width: '*', stack: [disclaimer] },
+          {
+            width: 78,
+            margin: [10, 0, 0, 0] as [number, number, number, number],
+            stack: [
+              { qr: result.verifyUrl, fit: 62, alignment: 'center', foreground: C.ink },
+              {
+                text: tr('result.verify'),
+                fontSize: Math.min(fs - 3, 6),
+                color: C.muted,
+                alignment: 'center',
+                margin: [0, 2, 0, 0],
+              },
+            ],
+          },
+        ],
+      }
+    : disclaimer;
+
   return {
     pageSize: 'A4',
     pageOrientation: 'portrait',
@@ -274,8 +375,9 @@ export function buildResultDocDefinition(result: PdfResult, lang: Lang): PdfDocD
           {
             width: '*',
             stack: [
-              { text: 'Dimed', font: 'Roboto', bold: true, fontSize: 17, color: C.rose },
-              { text: pdfText(tr('result.footer')), fontSize: fs - 2, color: C.muted, margin: [0, 1, 0, 0] },
+              // Haqiqiy logotip (vektor SVG) — matn emas.
+              { svg: LOGO_SVG, width: 88 },
+              { text: pdfText(tr('result.footer')), fontSize: fs - 2, color: C.muted, margin: [0, 3, 0, 0] },
             ],
           },
           {
@@ -293,7 +395,7 @@ export function buildResultDocDefinition(result: PdfResult, lang: Lang): PdfDocD
       patientTable,
       banner,
       dataTable,
-      disclaimer,
+      closing,
     ],
     footer: (currentPage: number, pageCount: number) => ({
       columns: [

@@ -1,10 +1,18 @@
 import { required, optional } from './env.ts';
 
-export type InlineButton = { text: string; callback_data: string };
+/**
+ * Xabar ostidagi tugma: `callback_data` — bosilsa `callback_query` keladi
+ * (baho so'rovi), `url` — havolani ochadi, `copy_text` — matnni bir
+ * bosishda nusxalaydi (kirish kodi uchun).
+ */
+export type InlineButton =
+  | { text: string; callback_data: string }
+  | { text: string; url: string }
+  | { text: string; copy_text: { text: string } };
 
 export type ReplyMarkup = {
   keyboard?: { text: string; request_contact?: boolean }[][];
-  /** Xabar ostidagi tugmalar — bosilsa `callback_query` keladi (baho so'rovi, G2). */
+  /** Xabar ostidagi tugmalar (baho so'rovi, G2; kirish havolasi). */
   inline_keyboard?: InlineButton[][];
   resize_keyboard?: boolean;
   one_time_keyboard?: boolean;
@@ -17,6 +25,35 @@ async function callBot(token: string, method: string, payload: unknown): Promise
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
   });
+}
+
+/**
+ * Telegram `ok: false` qaytargan xato. `status` bo'yicha xato vaqtinchalikmi
+ * (kalit almashtirilmoqda, Telegram band) yoki doimiymi (bemor botni
+ * bloklagan) ajratiladi — qarang `isTransientTelegramError`.
+ */
+export class TelegramError extends Error {
+  status: number;
+
+  constructor(status: number, body: string) {
+    super(`Telegram sendMessage muvaffaqiyatsiz (${status}): ${body}`);
+    this.status = status;
+  }
+}
+
+/**
+ * Xabar yetmay qolgani keyinroq urinsa tuzaladimi?
+ *
+ * Ha: tarmoq xatosi, 401 (kalit yaroqsiz — almashtirilgach ishlaydi),
+ * 408, 429 va 5xx. Yo'q: 400/403 — bemor botni bloklagan yoki chat yo'q,
+ * qayta urinish foydasiz va log-botni to'ldiradi.
+ *
+ * Cron'lar shunga qarab "yuborildi" belgisini qaytaradi: aks holda kalit
+ * buzilgan paytdagi hamma eslatma va natija xabarlari jimgina yo'qolardi.
+ */
+export function isTransientTelegramError(err: unknown): boolean {
+  if (!(err instanceof TelegramError)) return true;
+  return err.status === 401 || err.status === 408 || err.status === 429 || err.status >= 500;
 }
 
 /** Bemorga xabar yuborish (asosiy bot). */
@@ -33,7 +70,7 @@ export async function sendMessage(
   });
 
   if (!res.ok) {
-    throw new Error(`Telegram sendMessage muvaffaqiyatsiz (${res.status}): ${await res.text()}`);
+    throw new TelegramError(res.status, await res.text());
   }
 }
 

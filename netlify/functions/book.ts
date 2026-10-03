@@ -2,10 +2,11 @@ import type { Context } from '@netlify/functions';
 import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { db, TABLES } from './lib/db.ts';
-import { sessionFrom, getDoctor } from './lib/auth.ts';
+import { sessionFrom, getDoctor, isAdmin } from './lib/auth.ts';
 import { doctorDayKey, isValidSlot, isBookable } from './lib/slots.ts';
 import { shiftsFor } from './lib/schedule.ts';
-import { upcomingForPhone } from './lib/appointments.ts';
+import { upcomingForPhone, followupCheck, followupRejected } from './lib/appointments.ts';
+import { resolveService } from './lib/services.ts';
 import { isDateKey, isTime, toInstant, weekdayOf, type DateKey } from './lib/time.ts';
 import { createPayment } from './lib/payment.ts';
 import { listPatients } from './lib/patients.ts';
@@ -37,8 +38,18 @@ type Body = {
   date?: string;
   time?: string;
   patientId?: string;
+  /**
+   * Qo'shimcha xizmat (massaj, UZI, qayta ko'rik ...). Berilmasa — asosiy
+   * qabul: eski mijoz va xizmati yo'q shifokorlar avvalgidek ishlaydi.
+   */
+  serviceId?: string;
   /** Maxfiylik siyosatiga rozilik (B4) — usiz bron qilinmaydi. */
   privacyAccepted?: boolean;
+  /**
+   * Faqat administrator: onlayn to'lovni o'tkazib yuborish — to'lovli
+   * oqimni har safar haqiqiy to'lamasdan sinash uchun. Boshqalarga 403.
+   */
+  skipPayment?: boolean;
 };
 
 /** POST /api/book — slotni band qiladi va to'lovni boshlaydi. */
@@ -112,10 +123,35 @@ export default async (request: Request, _context: Context): Promise<Response> =>
 
     if (body.privacyAccepted !== true) return error('Maxfiylik siyosatiga rozilik kerak');
 
+    const skipPayment = body.skipPayment === true;
+    if (skipPayment && !isAdmin(session)) {
+      return error('To‘lovni o‘tkazib yuborish faqat administratorga ruxsat etilgan', 403);
+    }
+
+    /*
+      Xizmat: asosiy qabul yoki shifokorning qo'shimcha xizmati. Narx
+      shundan olinadi — mijoz yuborgan narxga ishonilmaydi.
+    */
+    const chosen = resolveService(doctor, body.serviceId);
+    if (!chosen) return error('Xizmat topilmadi — ro‘yxatdan tanlang', 404);
+
+    /*
+      Qayta ko'rik: shu shifokorga oddiy qabulga kelgan bemorga, qabuldan
+      keyingi N kun ichida (necha marta bo'lsa ham). Sharti bo'lmasa har kim
+      "bepul qayta ko'rik" ni tanlab olardi (lib/appointments.ts, followupCheck).
+    */
+    if (chosen.followupDays) {
+      const check = await followupCheck(session.phone, doctorId, patient.id, chosen.followupDays, date, now);
+      if (!check.ok) return error(followupRejected(chosen.name, chosen.followupDays, check));
+    }
+    const price = chosen.price;
+
     const payment = await createPayment({
-      amount: doctor.price,
+      amount: price,
       appointmentKey: `${doctorDayKey(doctorId, date)}#${time}`,
       phone: session.phone,
+      // Bepul xizmatda to'lovga o'tkazadigan narsa yo'q (Payme 0 so'mni rad etadi).
+      skipOnline: skipPayment || price === 0,
     });
 
     /*
@@ -152,8 +188,15 @@ export default async (request: Request, _context: Context): Promise<Response> =>
             starts_at: toInstant(date, time).toISOString(),
             status,
             hold_until: holdUntil,
-            price: doctor.price,
+            price,
+            // Asosiy qabulda xizmat maydonlari yozilmaydi — yozuv avvalgidek qoladi.
+            service_id: chosen.main ? undefined : chosen.id,
+            service_name: chosen.main ? undefined : chosen.name,
+            service_code: chosen.code,
+            service_followup: chosen.followupDays ? true : undefined,
             payment_id: payment.paymentId,
+            // Sinov bron: kim to'lovsiz band qilgani izi qoladi (hisobotda ajratish uchun).
+            payment_skipped_by: skipPayment ? session.userId : undefined,
             created_at: now.toISOString(),
           },
           /*
@@ -191,9 +234,15 @@ export default async (request: Request, _context: Context): Promise<Response> =>
           doctor_id: doctorId,
           date,
           time,
-          amount: doctor.price,
+          amount: price,
           mode: payment.mode,
-          status: payment.mode === 'at_clinic' ? 'pending_at_clinic' : 'pending',
+          status: skipPayment
+            ? 'skipped_by_admin'
+            : price === 0
+              ? 'free'
+              : payment.mode === 'at_clinic'
+                ? 'pending_at_clinic'
+                : 'pending',
           created_at: now.toISOString(),
         },
       }),
@@ -212,7 +261,15 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       .catch((err) => logToAdmin('book/rozilik', err));
 
     if (payment.mode === 'at_clinic') {
-      await confirmAtClinic(session.userId, doctor.name, date, time, doctor.price, patient.name);
+      await confirmAtClinic(
+        session.userId,
+        doctor.name,
+        date,
+        time,
+        price,
+        patient.name,
+        chosen.main ? undefined : chosen.name,
+      );
     }
 
     return json({
@@ -226,7 +283,8 @@ export default async (request: Request, _context: Context): Promise<Response> =>
         doctorName: doctor.name,
         date,
         time,
-        price: doctor.price,
+        price,
+        serviceName: chosen.main ? null : chosen.name,
         patientName: patient.name,
         patientBirthDate: patient.birthDate,
       },
@@ -245,16 +303,21 @@ async function confirmAtClinic(
   time: string,
   price: number,
   patientName?: string,
+  serviceName?: string,
 ): Promise<void> {
+  const cost = price === 0 ? 'bepul' : `${price.toLocaleString('ru-RU')} so'm`;
   try {
     await sendMessage(
       telegramId,
       `✅ <b>Navbatingiz band qilindi</b>\n\n` +
         (patientName ? `Bemor: ${escapeHtml(patientName)}\n` : '') +
         `Shifokor: ${escapeHtml(doctorName)}\n` +
+        (serviceName ? `Xizmat: ${escapeHtml(serviceName)}\n` : '') +
         `Sana: ${date}, soat ${time}\n` +
-        `Narx: ${price.toLocaleString('ru-RU')} so'm\n\n` +
-        `Qabulxona kassasiga ${price.toLocaleString('ru-RU')} so'm to'laysiz. Iltimos, 10 daqiqa oldin keling.\n` +
+        `Narx: ${cost}\n\n` +
+        (price === 0
+          ? `Bu xizmat uchun to'lov kerak emas. Iltimos, 10 daqiqa oldin keling.\n`
+          : `Qabulxona kassasiga ${cost} to'laysiz. Iltimos, 10 daqiqa oldin keling.\n`) +
         `Vaqtni ko'chirish — shaxsiy kabinetda, qabulgacha 1 soat qolgunicha.`,
     );
   } catch (err) {

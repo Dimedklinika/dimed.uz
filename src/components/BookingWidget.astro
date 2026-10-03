@@ -55,7 +55,7 @@ const widgetData = JSON.stringify({ departments, doctors });
   import { t } from '../data/i18n';
   import { getLang } from '../lib/lang';
   import { birthDateSelectsHtml, readBirthDate, formatBirthDate } from '../lib/birthdate';
-  import { ageOnDate, fitsAgeGroup, ageRejected, ageChip, toAgeGroup } from '../lib/age';
+  import { ageOnDate, fitsAgeGroup, ageRejected, ageChip, ageUnfit, toAgeGroup } from '../lib/age';
   import { site } from '../data/site';
   import { parsePhone, formatPhone } from '../lib/phone';
 
@@ -160,8 +160,61 @@ const widgetData = JSON.stringify({ departments, doctors });
     }
   };
 
+  /*
+    Kirgan hisob administratormi (sinov bron uchun "to'lovsiz" belgisi).
+    Header allaqachon /api/session javobini sessionStorage'da 5 daqiqa
+    saqlaydi (Nav.astro) — avval shuni ishlatamiz, bo'lmasa so'raymiz.
+    Bu faqat tugmani ko'rsatish uchun: ruxsatni server tekshiradi.
+  */
+  const isAdminSession = async () => {
+    try {
+      const cached = JSON.parse(sessionStorage.getItem('dimed_session') ?? 'null');
+      if (cached?.data && Date.now() - cached.t < 5 * 60_000) return cached.data.admin === true;
+    } catch {
+      /* xotira yopiq — so'raymiz */
+    }
+    try {
+      const res = await fetch('/api/session', { credentials: 'same-origin' });
+      return res.ok && (await res.json()).admin === true;
+    } catch {
+      return false;
+    }
+  };
+
   const state = { step: 1, deptId: null, doc: null, date: null, dateLabel: null, time: null, booked: null,
+    serviceId: 'main',
     patientId: null, patientName: null, patientBirthDate: null, privacyAccepted: readPrivacy() };
+
+  /*
+    Xizmat: shifokorning asosiy qabuli ('main', narxi `doc.price`) yoki
+    admin qo'shgan xizmatlardan biri (massaj, UZI, qayta ko'rik ...).
+    Xizmati yo'q shifokorda tanlov ko'rsatilmaydi — hammasi avvalgidek.
+    Narxni server o'zi xizmatdan oladi; bu yerdagi faqat ko'rsatish uchun.
+  */
+  const servicesOf = (doc) => doc?.services ?? [];
+  const chosenService = () => {
+    const doc = state.doc;
+    const found = servicesOf(doc).find((s) => s.id === state.serviceId);
+    return found
+      ? { id: found.id, name: found.name, price: found.price, followupDays: found.followupDays ?? null, main: false }
+      : { id: 'main', name: '', price: doc.price, followupDays: null, main: true };
+  };
+  const priceLabel = (price) => (price === 0 ? tr('booking.service.free') : fmtPrice(price));
+  const serviceChooserHtml = (doc) => {
+    const list = servicesOf(doc);
+    if (!list.length) return '';
+    const items = [{ id: 'main', name: tr('booking.service.main'), price: doc.price, followupDays: null }, ...list];
+    return `<div class="pane-label sub">${esc(tr('booking.pickService'))}</div><div class="svc-row">${items
+      .map(
+        (s) => `<button type="button" class="svc-pill${s.id === state.serviceId ? ' on' : ''}" data-s="${esc(s.id)}">
+          <b>${esc(s.name)}</b>
+          <small>${esc(priceLabel(s.price))}${
+            s.followupDays ? ` · ${esc(tr('booking.service.followup', { n: s.followupDays }))}` : ''
+          }</small>
+        </button>`,
+      )
+      .join('')}</div>`;
+  };
 
   /*
     Telefonga bog'langan bemorlar. Bir raqamdan butun oila foydalanadi
@@ -283,6 +336,7 @@ const widgetData = JSON.stringify({ departments, doctors });
       wBody.querySelectorAll('.doc-btn').forEach((b) =>
         b.addEventListener('click', () => {
           state.doc = docById(b.dataset.id);
+          state.serviceId = 'main';
           state.date = null;
           state.time = null;
           setStep(3);
@@ -305,8 +359,14 @@ const widgetData = JSON.stringify({ departments, doctors });
     const workdays = days.filter((x) => x.ok);
     if (!state.date && workdays.length) state.date = dstr(workdays[0].date);
 
+    // Xizmati yo'q shifokorda sarlavha avvalgidek bitta qator; bo'lsa — nom, xizmat tanlovi, keyin "qachon".
+    const chooser = serviceChooserHtml(doc);
+    const head = chooser
+      ? `<div class="pane-label">${esc(doc.name)}</div>${chooser}<div class="pane-label sub">${esc(tr('booking.pickWhen'))}</div>`
+      : `<div class="pane-label">${esc(doc.name)} · ${esc(tr('booking.pickWhen'))}</div>`;
+
     wBody.innerHTML =
-      `<div class="pane-label">${esc(doc.name)} · ${esc(tr('booking.pickWhen'))}</div><div class="date-row">` +
+      `${head}<div class="date-row">` +
       days
         .map(
           (x) => `<button class="date-pill${dstr(x.date) === state.date ? ' on' : ''}"
@@ -319,6 +379,14 @@ const widgetData = JSON.stringify({ departments, doctors });
        <button class="back-link">${esc(tr('booking.back.doctor'))}</button>`;
 
     const grid = wBody.querySelector('#slotGrid');
+
+    // Xizmat tanlovi: faqat belgi almashadi (vaqtlar o'zgarmaydi), narx 5-qadamda ko'rinadi.
+    wBody.querySelectorAll('.svc-pill').forEach((pill) =>
+      pill.addEventListener('click', () => {
+        state.serviceId = pill.dataset.s;
+        wBody.querySelectorAll('.svc-pill').forEach((p) => p.classList.toggle('on', p === pill));
+      }),
+    );
 
     const selectDate = (dateKey) => {
       state.date = dateKey;
@@ -402,7 +470,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     return `<button class="who-item${p.id === state.patientId ? ' on' : ''}${fits ? '' : ' unfit'}" data-pick="${esc(p.id)}">
       <span class="who-nm">${esc(p.name)}</span>
       <small class="who-bd${p.birthDate ? '' : ' none'}">${note}${
-        fits ? '' : ` · ${esc(ageChip(docAgeGroup(), lang))} emas`
+        fits ? '' : ` · ${esc(ageUnfit(docAgeGroup(), lang))}`
       }</small>
     </button>`;
   };
@@ -716,21 +784,31 @@ const widgetData = JSON.stringify({ departments, doctors });
 
   function renderCheckout() {
     const d = state.doc;
+    const svc = chosenService();
+    // Bron qilingandan keyin narxni server tasdiqlagan qiymatdan olamiz.
+    const price = state.booked?.appointment?.price ?? svc.price;
+    const serviceName = state.booked ? state.booked.appointment?.serviceName : svc.main ? null : svc.name;
 
     // Narx faqat raqam (so'msiz) — "… X soʻm toʻlaysiz" matniga qo'yish uchun.
-    const priceNumber = d.price.toLocaleString('ru-RU').replace(/,/g, ' ');
+    const priceNumber = price.toLocaleString('ru-RU').replace(/,/g, ' ');
+    // Bepul xizmatda "kassaga to'laysiz" deyilmaydi.
+    const payNote = price === 0 ? tr('booking.confirm.free') : tr('booking.confirm.payAtDesk', { price: priceNumber });
+    const serviceRow = serviceName
+      ? `<div class="sum-row"><span class="k">${esc(tr('booking.summary.service'))}</span><span class="v">${esc(serviceName)}</span></div>`
+      : '';
 
     if (state.booked) {
       const b = state.booked;
       wBody.innerHTML = `<div class="success">
         <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg></div>
         <h4>${esc(tr('booking.success.title'))}</h4>
-        <p>${esc(b.mode === 'at_clinic' ? tr('booking.confirm.payAtDesk', { price: priceNumber }) : tr('booking.paid'))}</p>
+        <p>${esc(b.mode === 'at_clinic' ? payNote : tr('booking.paid'))}</p>
         <div class="sum-card" style="margin-top:14px;text-align:left">
           ${state.patientName ? `<div class="sum-row"><span class="k">${esc(tr('booking.summary.patient'))}</span><span class="v">${esc(state.patientName)}</span></div>` : ''}
           <div class="sum-row"><span class="k">${esc(tr('booking.summary.doctor'))}</span><span class="v">${esc(d.name)}</span></div>
+          ${serviceRow}
           <div class="sum-row"><span class="k">${esc(tr('booking.summary.when'))}</span><span class="v">${state.dateLabel} · ${state.time}</span></div>
-          <div class="sum-row total"><span class="k">${esc(tr('booking.confirm.price'))}</span><span class="v">${fmtPrice(d.price)}</span></div>
+          <div class="sum-row total"><span class="k">${esc(tr('booking.confirm.price'))}</span><span class="v">${esc(priceLabel(price))}</span></div>
         </div>
         <p class="pay-note">${esc(tr('booking.success.telegram'))}</p>
         <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap">
@@ -739,7 +817,7 @@ const widgetData = JSON.stringify({ departments, doctors });
         </div>
       </div>`;
       wBody.querySelector('#resetBtn').addEventListener('click', () => {
-        Object.assign(state, { step: 1, deptId: null, doc: null, date: null, time: null, booked: null });
+        Object.assign(state, { step: 1, deptId: null, doc: null, serviceId: 'main', date: null, time: null, booked: null });
         setStep(1);
       });
       return;
@@ -754,8 +832,8 @@ const widgetData = JSON.stringify({ departments, doctors });
     wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.confirm.title'))}</div>
       <div class="price-box">
         <div class="price-lab">${esc(tr('booking.confirm.price'))}</div>
-        <div class="price-big">${fmtPrice(d.price)}</div>
-        <div class="price-note">${esc(tr('booking.confirm.payAtDesk', { price: priceNumber }))}</div>
+        <div class="price-big">${esc(priceLabel(price))}</div>
+        <div class="price-note">${esc(payNote)}</div>
       </div>
       <div class="sum-card">
         <div class="sum-row" id="whoRow" hidden><span class="k">${esc(tr('booking.summary.patient'))}</span>
@@ -763,6 +841,7 @@ const widgetData = JSON.stringify({ departments, doctors });
             <button class="who-change" id="whoChange" type="button">${esc(tr('booking.change'))}</button></span></div>
         <div class="sum-row"><span class="k">${esc(tr('booking.summary.doctor'))}</span><span class="v">${esc(d.name)}</span></div>
         <div class="sum-row"><span class="k">${esc(tr('booking.summary.field'))}</span><span class="v">${esc(jobText(d))}</span></div>
+        ${serviceRow}
         <div class="sum-row"><span class="k">${esc(tr('booking.summary.date'))}</span><span class="v">${state.dateLabel}</span></div>
         <div class="sum-row"><span class="k">${esc(tr('booking.summary.time'))}</span><span class="v">${state.time} · ${d.slotMinutes} ${esc(tr('booking.minutes'))}</span></div>
       </div>
@@ -775,6 +854,22 @@ const widgetData = JSON.stringify({ departments, doctors });
 
     const msg = wBody.querySelector('#bookMsg');
     const btn = wBody.querySelector('#wBook');
+
+    /*
+      Administrator uchun sinov: onlayn to'lov yoqilganda ham har safar
+      to'lamasdan bron qilib ko'rish. Tugma faqat adminga ko'rinadi, server
+      esa ruxsatni o'zi qayta tekshiradi (`skipPayment` — faqat admin).
+    */
+    (async () => {
+      if (!(await isAdminSession())) return;
+      if (!btn.isConnected || wBody.querySelector('#skipPay')) return;
+      btn.insertAdjacentHTML(
+        'beforebegin',
+        `<label class="admin-skip" style="display:flex;gap:8px;align-items:center;font-size:13px;margin:8px 0">
+           <input type="checkbox" id="skipPay" /> ${esc(tr('booking.confirm.adminSkip'))}
+         </label>`,
+      );
+    })();
 
     // 4-qadamda tanlangan bemor shu yerda ko'rinadi.
     const whoRow = wBody.querySelector('#whoRow');
@@ -799,7 +894,9 @@ const widgetData = JSON.stringify({ departments, doctors });
             date: state.date,
             time: state.time,
             ...(state.patientId ? { patientId: state.patientId } : {}),
+            ...(svc.main ? {} : { serviceId: svc.id }),
             privacyAccepted: state.privacyAccepted,
+            ...(wBody.querySelector('#skipPay')?.checked ? { skipPayment: true } : {}),
           }),
         });
         const data = await res.json();
@@ -932,6 +1029,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     if (!b) return;
     state.deptId = b.dataset.bookDept;
     state.booked = null;
+    state.serviceId = 'main';
     state.time = null;
     state.date = null;
     // Shifokor jonli ro'yxatdan o'chirilgan bo'lishi mumkin — o'shanda
@@ -1012,7 +1110,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     background: var(--busy);
     border-radius: 10px;
     padding: 8px 4px;
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 650;
     color: var(--muted);
     display: flex;
@@ -1030,7 +1128,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     border-radius: 50%;
     background: var(--line);
     color: var(--ink);
-    font-size: 10.5px;
+    font-size: 12px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1079,7 +1177,7 @@ const widgetData = JSON.stringify({ departments, doctors });
 
   .widget :global(.dept-grid) {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
@@ -1131,7 +1229,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     display: block;
     font-weight: 500;
     color: var(--muted);
-    font-size: 11.5px;
+    font-size: 12px;
   }
 
   .widget :global(.doc-list) {
@@ -1183,7 +1281,7 @@ const widgetData = JSON.stringify({ departments, doctors });
   }
 
   .widget :global(.doc-btn .age-tag) {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 650;
     color: var(--rose);
     background: var(--rose-soft);
@@ -1193,7 +1291,7 @@ const widgetData = JSON.stringify({ departments, doctors });
   }
 
   .widget :global(.doc-btn .rate-tag) {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 650;
     color: var(--warn);
     background: var(--warn-bg);
@@ -1204,13 +1302,57 @@ const widgetData = JSON.stringify({ departments, doctors });
   }
 
   .widget :global(.doc-btn .slot-tag) {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 650;
     color: var(--leaf);
     background: var(--leaf-soft);
     border-radius: 999px;
     padding: 4px 8px;
     white-space: nowrap;
+  }
+
+  .widget :global(.pane-label.sub) {
+    margin-top: 16px;
+  }
+
+  /* Xizmat tanlovi: massaj, UZI, qayta ko'rik ... (faqat xizmati bor shifokorda). */
+  .widget :global(.svc-row) {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .widget :global(.svc-pill) {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    text-align: left;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 12px;
+    padding: 8px 16px;
+    transition: border-color 0.15s;
+  }
+
+  .widget :global(.svc-pill b) {
+    font-size: 14px;
+    font-weight: 650;
+  }
+
+  .widget :global(.svc-pill small) {
+    font-size: 12.5px;
+    color: var(--muted);
+    text-align: right;
+  }
+
+  .widget :global(.svc-pill:hover) {
+    border-color: var(--rose);
+  }
+
+  .widget :global(.svc-pill.on) {
+    border-color: var(--rose);
+    background: var(--rose-soft);
   }
 
   .widget :global(.date-row) {
@@ -1228,7 +1370,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     border-radius: 12px;
     padding: 8px;
     text-align: center;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--muted);
     transition: border-color 0.15s;
@@ -1260,7 +1402,7 @@ const widgetData = JSON.stringify({ departments, doctors });
 
   .widget :global(.slot-grid) {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
     max-height: 210px;
     overflow-y: auto;
@@ -1304,7 +1446,7 @@ const widgetData = JSON.stringify({ departments, doctors });
   .widget :global(.slot-legend) {
     display: flex;
     gap: 16px;
-    font-size: 11.5px;
+    font-size: 12px;
     color: var(--muted);
     margin-top: 16px;
   }
@@ -1380,7 +1522,7 @@ const widgetData = JSON.stringify({ departments, doctors });
   }
 
   .widget :global(.price-lab) {
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 650;
     text-transform: uppercase;
     letter-spacing: 0.09em;
@@ -1646,7 +1788,7 @@ const widgetData = JSON.stringify({ departments, doctors });
 
   .widget :global(.birth-row) {
     display: grid;
-    grid-template-columns: 1fr 1.6fr 1.2fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1.2fr);
     gap: 8px;
   }
 
