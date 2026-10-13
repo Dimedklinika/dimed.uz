@@ -1,4 +1,6 @@
+import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { required, optional } from './env.ts';
+import { db, TABLES } from './db.ts';
 
 /**
  * Xabar ostidagi tugma: `callback_data` — bosilsa `callback_query` keladi
@@ -107,17 +109,80 @@ export async function editMessageReplyMarkup(
   }
 }
 
+/** Bir xil xato log-botga shuncha vaqt ichida bir martagina boradi. */
+const LOG_COOLDOWN_SECONDS = 10 * 60;
+const recentLogs = new Map<string, number>();
+
+/** Qisqa, barqaror kalit: kontekst + xato matnining birinchi qatori. */
+function logKey(context: string, error: unknown): string {
+  const first = (error instanceof Error ? error.message : String(error)).split('\n')[0] ?? '';
+  const text = `${context}|${first}`.slice(0, 300);
+  let hash = 5381;
+  for (let i = 0; i < text.length; i++) hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
+  return `log#${(hash >>> 0).toString(36)}`;
+}
+
+/**
+ * Shu xato yaqinda yuborilganmi.
+ *
+ * Avval har xato log-botga alohida borardi: bitta buzilgan jadval yoki
+ * kalit minglab bir xil xabar bilan guruhni to'ldirib, haqiqiy muammoni
+ * ko'mib yuborardi. Endi bir xil xato 10 daqiqada bir marta yuboriladi:
+ * avval xotirada (bitta ishlayotgan nusxa ichida), keyin DynamoDB'da
+ * (Netlify nusxalari orasida). Bu tekshiruv yiqilsa — xato baribir
+ * yuboriladi, log yo'qolmasin (va bu yerda `logToAdmin` chaqirilmaydi:
+ * aks holda cheksiz aylanardi).
+ */
+async function isDuplicateLog(key: string): Promise<boolean> {
+  const now = Math.floor(Date.now() / 1000);
+  const last = recentLogs.get(key);
+  if (last !== undefined && now - last < LOG_COOLDOWN_SECONDS) return true;
+  recentLogs.set(key, now);
+  if (recentLogs.size > 200) {
+    for (const [k, at] of recentLogs) if (now - at >= LOG_COOLDOWN_SECONDS) recentLogs.delete(k);
+  }
+
+  try {
+    const windowStart = Math.floor(now / LOG_COOLDOWN_SECONDS) * LOG_COOLDOWN_SECONDS;
+    const res = await db.send(
+      new UpdateCommand({
+        TableName: TABLES.rateLimits,
+        Key: { bucket: `${key}#${windowStart}` },
+        UpdateExpression: 'SET hits = if_not_exists(hits, :zero) + :one, expires_at = :exp',
+        ExpressionAttributeValues: {
+          ':zero': 0,
+          ':one': 1,
+          ':exp': windowStart + LOG_COOLDOWN_SECONDS,
+        },
+        ReturnValues: 'ALL_NEW',
+      }),
+    );
+    return Number((res.Attributes as { hits?: number } | undefined)?.hits ?? 1) > 1;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Xatolikni admin log-botga yuboradi. Log yuborishning o'zi ham
  * yiqilsa, asosiy so'rovni buzmaslik uchun faqat konsolga yoziladi.
+ * Bir xil xato 10 daqiqada bir marta yuboriladi (konsolga — har safar).
  */
 export async function logToAdmin(context: string, error: unknown): Promise<void> {
-  const detail = error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error);
+  let detail = error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error);
+  // Jadval yo'qligi eng ko'p uchraydigan sabab — xabarning o'zi nima qilishni aytsin.
+  if (error instanceof Error && error.name === 'ResourceNotFoundException') {
+    detail =
+      `DynamoDB jadvali topilmadi (region/prefiks to'g'rimi? jadvallar yaratilganmi?): ` +
+      `\`npm run create-tables\` ni ishga tushiring.\n${detail}`;
+  }
   console.error(`[${context}]`, detail);
 
   const token = optional('TELEGRAM_LOG_BOT_TOKEN');
   const chatId = optional('TELEGRAM_LOG_CHAT_ID');
   if (!token || !chatId) return;
+
+  if (await isDuplicateLog(logKey(context, error))) return;
 
   try {
     await callBot(token, 'sendMessage', {

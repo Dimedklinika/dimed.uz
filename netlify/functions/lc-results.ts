@@ -1,8 +1,7 @@
 import type { Context } from '@netlify/functions';
-import { timingSafeEqual } from 'node:crypto';
 import { PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLES } from './lib/db.ts';
-import { optional } from './lib/env.ts';
+import { checkLcKey } from './lib/api-key.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 import { parsePhone } from './lib/phone.ts';
@@ -42,14 +41,8 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     berilmagan bo'lsa endpoint umuman yopiq — ishlatilmayotgan eshik
     ochiq turmasin. Qaytadan kerak bo'lsa LC_API_KEY qo'yiladi.
   */
-  const key = optional('LC_API_KEY');
-  if (!key) return error('Bu yo‘l yopiq', 404);
-
-  const given = Buffer.from(request.headers.get('x-api-key') ?? '');
-  const expected = Buffer.from(key);
-  if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
-    return error('API kalit noto‘g‘ri', 401);
-  }
+  const denied = checkLcKey(request);
+  if (denied) return denied;
 
   try {
     const body = (await request.json()) as Body;

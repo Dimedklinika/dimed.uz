@@ -8,24 +8,26 @@ import { t } from '../../data/i18n';
   title="Tahlillarim — Dimed klinikasi"
   description="Laboratoriya tahlillaringizning natijalari."
   eyebrow="Shaxsiy kabinet"
+  eyebrowKey="cab.eyebrow.patient"
   heading="Tahlillarim"
+  headingKey="cabinet.menu.results"
   area="patient"
   active="tahlillar"
 >
-  <a class="btn btn-ghost btn-sm" href="/tahlillar" slot="actions">Tahlil turlari va narxlar</a>
+  <a class="btn btn-ghost btn-sm" href="/tahlillar" slot="actions" data-t="cab.resultTypes">Tahlil turlari va narxlar</a>
 
   <div class="who-bar" id="whoBar" hidden>
-    <span class="who-lab">Kim:</span>
+    <span class="who-lab" data-t="cab.who">Kim:</span>
     <div class="who-chips" id="whoChips"></div>
   </div>
 
-  <div id="loading" class="state">Yuklanmoqda…</div>
+  <div id="loading" class="state" data-t="common.loading">Yuklanmoqda…</div>
 
-  <SignInCard what={t('signin.what.results')} next="/kabinet/tahlillar" hidden />
+  <SignInCard what={t('signin.what.results')} whatKey="signin.what.results" next="/kabinet/tahlillar" hidden />
 
   <div id="content" hidden>
     <div class="list glass" id="results"></div>
-    <p class="note">
+    <p class="note" data-t="cab.resultsNote">
       Natijalar laboratoriya tizimidan avtomatik keladi. Qator bosilganda natija sahifasi ochiladi —
       u yerdan PDF yuklash va ulashish mumkin.
     </p>
@@ -93,7 +95,7 @@ import { t } from '../../data/i18n';
     }
     el('whoBar').hidden = false;
     el('whoChips').innerHTML = [
-      `<button class="who-chip${whoFilter ? '' : ' on'}" data-who="">Hammasi</button>`,
+      `<button class="who-chip${whoFilter ? '' : ' on'}" data-who="">${esc(tr('cab.all'))}</button>`,
       ...names.map(
         (n) => `<button class="who-chip${whoFilter === n ? ' on' : ''}" data-who="${esc(n)}">${esc(n)}</button>`,
       ),
@@ -131,7 +133,7 @@ import { t } from '../../data/i18n';
             const ready = g.status === 'ready';
             return `<a class="lab-row" href="/natija?id=${encodeURIComponent(g.id)}">
               <span class="lab-body">
-                <span class="nm">${esc(resultTitle(g, lang))}${g.seen ? '' : ' <span class="pill new">yangi</span>'}</span>
+                <span class="nm">${esc(resultTitle(g, lang))}${g.seen ? '' : ` <span class="pill new">${esc(tr('cab.new'))}</span>`}</span>
                 <span class="dt">${meta}</span>
               </span>
               <span class="lab-side">
@@ -159,7 +161,7 @@ import { t } from '../../data/i18n';
       if (!res.ok) throw new Error(String(res.status));
       data = await res.json();
     } catch {
-      el('loading').textContent = 'Ma’lumotlarni yuklab bo‘lmadi. Sahifani yangilang.';
+      el('loading').textContent = tr('cab.loadFailed');
       return;
     }
 

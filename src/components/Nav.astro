@@ -1,6 +1,6 @@
 ---
 import Logo from './Logo.astro';
-import { LANGS, type Lang } from '../data/i18n';
+import { LANGS, t, type Lang } from '../data/i18n';
 import { h, langHref, LANG_LABEL } from '../data/home';
 
 interface Props {
@@ -70,7 +70,9 @@ const langLinks = lang ? LANGS.map((code) => ({ code, href: langHref(bare, code)
           class="burger"
           id="navBurger"
           type="button"
-          aria-label="Menyuni ochish"
+          aria-label={t('nav.menuOpen', L)}
+          data-open-label={t('nav.menuOpen', L)}
+          data-close-label={t('nav.menuClose', L)}
           aria-expanded="false"
           aria-controls="navMenu"
         >
@@ -119,13 +121,24 @@ const langLinks = lang ? LANGS.map((code) => ({ code, href: langHref(bare, code)
   const acctMenu = document.getElementById('acctMenu');
   const kabinet = document.getElementById('navKabinet') as HTMLAnchorElement | null;
 
+  // Kabinetda til brauzerda ma'lum — burger yozuvlari ham shu tilda bo'lsin.
+  if (burger && header && !header.dataset.navLang) {
+    const lang = getLang();
+    burger.dataset.openLabel = t('nav.menuOpen', lang);
+    burger.dataset.closeLabel = t('nav.menuClose', lang);
+    burger.setAttribute('aria-label', burger.dataset.openLabel);
+  }
+
   /* ---------- burger (mobil havolalar) ---------- */
   const setMenuOpen = (open: boolean) => {
     if (!menu || !burger || !header) return;
     menu.hidden = !open;
     header.classList.toggle('open', open);
     burger.setAttribute('aria-expanded', String(open));
-    burger.setAttribute('aria-label', open ? 'Menyuni yopish' : 'Menyuni ochish');
+    burger.setAttribute(
+      'aria-label',
+      (open ? burger.dataset.closeLabel : burger.dataset.openLabel) ?? '',
+    );
     if (open) setAcctOpen(false);
   };
 
@@ -226,10 +239,11 @@ const langLinks = lang ? LANGS.map((code) => ({ code, href: langHref(bare, code)
 
   function renderAccount(info: SessionInfo) {
     if (!kabinet || !acctMenu) return;
+    // Ommaviy sahifada menyu sahifaning o'z tilida (getLang shuni qaytaradi).
     const lang = getLang();
     const tr = (key: Parameters<typeof t>[0]) => t(key, lang);
     const { first, initials } = nameParts(info.name ?? '');
-    const label = first || info.phone || 'Kabinet';
+    const label = first || info.phone || tr('nav.cabinet');
     const avatar = initials || '•';
 
     // "Kabinet" havolasi o'rniga menyu tugmasi.
@@ -256,7 +270,7 @@ const langLinks = lang ? LANGS.map((code) => ({ code, href: langHref(bare, code)
     );
     if (info.doctor) {
       sections.push(
-        `<div class="acct-sec" role="none"><div class="acct-lab">Shifokor kabineti · ${esc(info.doctor.name)}</div>
+        `<div class="acct-sec" role="none"><div class="acct-lab">${esc(tr('cabinet.menu.doctorArea'))} · ${esc(info.doctor.name)}</div>
           ${link('/kabinet/shifokor', tr('cabinet.menu.today'))}
           ${link('/kabinet/shifokor/jadval', tr('cabinet.menu.schedule'))}
           ${link('/kabinet/shifokor/dam', tr('cabinet.menu.dayOff'))}
@@ -266,9 +280,11 @@ const langLinks = lang ? LANGS.map((code) => ({ code, href: langHref(bare, code)
     }
     if (info.admin) {
       sections.push(
-        `<div class="acct-sec" role="none"><div class="acct-lab">Administrator</div>
+        `<div class="acct-sec" role="none"><div class="acct-lab">${esc(tr('cabinet.menu.adminArea'))}</div>
           ${link('/kabinet/admin', tr('cabinet.menu.doctors'))}
+          ${link('/kabinet/admin/navbatlar', tr('cabinet.menu.clinicAppointments'))}
           ${link('/kabinet/admin/narxlar', tr('cabinet.menu.prices'))}
+          ${link('/kabinet/admin/referenslar', tr('cabinet.menu.references'))}
           ${link('/kabinet/admin/baholar', tr('cabinet.menu.ratings'))}
         </div>`,
       );
@@ -640,6 +656,11 @@ const langLinks = lang ? LANGS.map((code) => ({ code, href: langHref(bare, code)
     .nav-book,
     .nav-cta .lang-pick {
       display: none;
+    }
+
+    /* Havolalar yashirilganda kabinet va burger o'ng chetga yopishsin, o'rtada qolmasin. */
+    .nav-links + .nav-cta {
+      margin-left: auto;
     }
 
     .burger {

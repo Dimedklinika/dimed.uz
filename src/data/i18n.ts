@@ -7,6 +7,8 @@
  * Bot xabarlari uchun server tomonida alohida lug'at bor:
  * `netlify/functions/lib/i18n.ts` (bir xil kalitlar).
  */
+import { cabinetMessages } from './i18n-cabinet.ts';
+
 export type Lang = 'uz' | 'ru' | 'en';
 
 export const LANGS: readonly Lang[] = ['uz', 'ru', 'en'] as const;
@@ -23,6 +25,7 @@ export const isLang = (value: unknown): value is Lang =>
 type Entry = Record<Lang, string>;
 
 export const messages = {
+  ...cabinetMessages,
   // --- umumiy ---
   'common.back': { uz: '← orqaga', ru: '← назад', en: '← back' },
   'common.save': { uz: 'Saqlash', ru: 'Сохранить', en: 'Save' },
@@ -43,6 +46,8 @@ export const messages = {
   'nav.contact': { uz: 'Kontakt', ru: 'Контакты', en: 'Contact' },
   'nav.cabinet': { uz: 'Kabinet', ru: 'Кабинет', en: 'Cabinet' },
   'nav.book': { uz: 'Navbat olish', ru: 'Записаться', en: 'Book' },
+  'nav.menuOpen': { uz: 'Menyuni ochish', ru: 'Открыть меню', en: 'Open menu' },
+  'nav.menuClose': { uz: 'Menyuni yopish', ru: 'Закрыть меню', en: 'Close menu' },
   'footer.privacy': { uz: 'Maxfiylik siyosati', ru: 'Политика конфиденциальности', en: 'Privacy policy' },
 
   // --- 404 ---
@@ -59,16 +64,16 @@ export const messages = {
   // --- kirish sahifasi (/kirish) ---
   'signin.page.title': { uz: 'Kirish — Dimed klinikasi', ru: 'Вход — клиника Dimed', en: 'Sign in — Dimed clinic' },
   'signin.page.description': {
-    uz: 'Telegram bot orqali shaxsiy kabinetga kirish. SMS ham, parol ham kerak emas.',
-    ru: 'Вход в личный кабинет через Telegram-бот. Ни SMS, ни пароля не нужно.',
-    en: 'Sign in to your cabinet through the Telegram bot. No SMS, no password.',
+    uz: 'Telegram bot orqali shaxsiy kabinetga tez va parolsiz kirish.',
+    ru: 'Быстрый вход в личный кабинет через Telegram-бот, без пароля.',
+    en: 'Quick, passwordless sign-in to your cabinet through the Telegram bot.',
   },
   'signin.page.eyebrow': { uz: 'Shaxsiy kabinet', ru: 'Личный кабинет', en: 'Personal cabinet' },
   'signin.page.heading': { uz: 'Saytga kirish', ru: 'Вход на сайт', en: 'Sign in' },
   'signin.page.lede': {
-    uz: 'Telegram bot orqali — SMS ham, parol ham kerak emas.',
-    ru: 'Через Telegram-бот — ни SMS, ни пароля не нужно.',
-    en: 'Through the Telegram bot — no SMS, no password.',
+    uz: 'Telegram orqali — tez va parolsiz.',
+    ru: 'Через Telegram — быстро и без пароля.',
+    en: 'Through Telegram — quick and passwordless.',
   },
   'signin.page.step1': {
     uz: 'Botga oʻting va kontaktingizni ulashing',
@@ -260,6 +265,19 @@ export const messages = {
   'booking.step.patient': { uz: 'Bemor', ru: 'Пациент', en: 'Patient' },
   'booking.step.confirm': { uz: 'Tasdiqlash', ru: 'Подтверждение', en: 'Confirm' },
   'booking.whoFor': { uz: 'Navbat kim uchun?', ru: 'Для кого запись?', en: 'Who is the appointment for?' },
+  'booking.who.hint': {
+    uz: 'Ro‘yxatdan navbat olinadigan odamni bosing — keyingi qadamga o‘tiladi. Ro‘yxatda yo‘q bo‘lsa, «Boshqa odam» tugmasini bosing.',
+    ru: 'Нажмите на человека, для которого нужна запись, — откроется следующий шаг. Нет в списке — нажмите «Другой человек».',
+    en: 'Tap the person the appointment is for to continue. Not in the list? Tap “Someone else”.',
+  },
+  'booking.who.pick': { uz: 'Tanlash ›', ru: 'Выбрать ›', en: 'Select ›' },
+  'booking.who.new': { uz: '+ Boshqa odam', ru: '+ Другой человек', en: '+ Someone else' },
+  'booking.who.saveContinue': { uz: 'Saqlash va davom etish', ru: 'Сохранить и продолжить', en: 'Save and continue' },
+  'booking.who.notFound': {
+    uz: 'Klinikada yozuvingiz topilmadi — ism-familiyangizni kiriting.',
+    ru: 'Вашей записи в клинике не найдено — введите фамилию и имя.',
+    en: 'We could not find your record at the clinic — please enter your name.',
+  },
   'booking.birthDate': { uz: 'Tugʻilgan sana', ru: 'Дата рождения', en: 'Date of birth' },
   'booking.birthDate.day': { uz: 'Kun', ru: 'День', en: 'Day' },
   'booking.birthDate.month': { uz: 'Oy', ru: 'Месяц', en: 'Month' },
@@ -298,9 +316,9 @@ export const messages = {
   'signin.title': { uz: 'Bu — shaxsiy sahifa', ru: 'Это личная страница', en: 'This is a private page' },
   'signin.denied.title': { uz: 'Bu boʻlim sizga ochiq emas', ru: 'Этот раздел вам недоступен', en: 'This section is not open to you' },
   'signin.lede': {
-    uz: 'Kimning qanday maʼlumoti ekanini faqat egasi koʻradi. Davom etish uchun Telegram orqali kiring — SMS ham, parol ham kerak emas.',
-    ru: 'Чьи и какие это данные, видит только владелец. Чтобы продолжить, войдите через Telegram — без SMS и паролей.',
-    en: 'Only the owner can see whose data this is. Sign in with Telegram to continue — no SMS, no password.',
+    uz: 'Kimning qanday maʼlumoti ekanini faqat egasi koʻradi. Davom etish uchun Telegram orqali parolsiz kiring.',
+    ru: 'Чьи и какие это данные, видит только владелец. Чтобы продолжить, войдите через Telegram — без пароля.',
+    en: 'Only the owner can see whose data this is. Sign in with Telegram to continue — no password needed.',
   },
   'signin.step1': { uz: 'Botga /start yuboring — 6 xonali kod keladi', ru: 'Отправьте боту /start — придёт 6-значный код', en: 'Send /start to the bot — you will get a 6-digit code' },
   'signin.step2': { uz: 'Kodni kirish sahifasiga kiriting', ru: 'Введите код на странице входа', en: 'Enter the code on the sign-in page' },
@@ -326,9 +344,9 @@ export const messages = {
   // --- 4-qadam: kirish (guest) va yosh cheklovi ---
   'booking.login.title': { uz: 'Davom etish uchun kiring', ru: 'Войдите, чтобы продолжить', en: 'Sign in to continue' },
   'booking.login.lede': {
-    uz: 'Navbat kim uchun ekanini bilishimiz uchun Telegram orqali kiring — SMS ham, parol ham kerak emas.',
-    ru: 'Войдите через Telegram, чтобы мы знали, для кого запись — без SMS и паролей.',
-    en: 'Sign in with Telegram so we know who the appointment is for — no SMS, no password.',
+    uz: 'Navbat kim uchun ekanini bilishimiz uchun Telegram orqali parolsiz kiring.',
+    ru: 'Войдите через Telegram, чтобы мы знали, для кого запись — без пароля.',
+    en: 'Sign in with Telegram so we know who the appointment is for — no password needed.',
   },
   'booking.login.botStep': { uz: 'Botga /start yuboring va 6 xonali kodni oling', ru: 'Отправьте боту /start и получите 6-значный код', en: 'Send /start to the bot and get the 6-digit code' },
   'booking.login.botBtn': { uz: 'Botni ochish', ru: 'Открыть бота', en: 'Open the bot' },
@@ -421,10 +439,14 @@ export const messages = {
   'cabinet.menu.login': { uz: 'Kirish', ru: 'Войти', en: 'Sign in' },
   'cabinet.menu.today': { uz: 'Bugungi navbatlar', ru: 'Записи на сегодня', en: 'Today’s appointments' },
   'cabinet.menu.schedule': { uz: 'Jadvalim', ru: 'Моё расписание', en: 'My schedule' },
-  'cabinet.menu.dayOff': { uz: 'Ishga chiqa olmayman', ru: 'Не смогу выйти', en: 'Day off' },
+  'cabinet.menu.dayOff': { uz: 'Ish kunini o‘zgartirish', ru: 'Изменить рабочий день', en: 'Change work day' },
   'cabinet.menu.doctors': { uz: 'Shifokorlar', ru: 'Врачи', en: 'Doctors' },
   'cabinet.menu.prices': { uz: 'Narxlar', ru: 'Цены', en: 'Prices' },
   'cabinet.menu.ratings': { uz: 'Baholar', ru: 'Оценки', en: 'Ratings' },
+  'cabinet.menu.clinicAppointments': { uz: 'Klinika navbatlari', ru: 'Записи клиники', en: 'Clinic appointments' },
+  'cabinet.menu.references': { uz: 'Me’yoriy qiymatlar', ru: 'Референсы', en: 'Reference ranges' },
+  'cabinet.menu.doctorArea': { uz: 'Shifokor kabineti', ru: 'Кабинет врача', en: 'Doctor cabinet' },
+  'cabinet.menu.adminArea': { uz: 'Administrator', ru: 'Администратор', en: 'Administrator' },
 
   // --- tahlillar ro'yxati (C2, C3) ---
   'results.mine': { uz: 'Mening tahlillarim', ru: 'Мои анализы', en: 'My results' },
