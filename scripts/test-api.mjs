@@ -82,6 +82,7 @@ const verifyApi = await load('verify.ts');
 const appointmentStatus = await load('appointment-status.ts');
 const pricesApi = await load('prices.ts');
 const adminPrices = await load('admin-prices.ts');
+const lcPrices = await load('lc-prices.ts');
 const adminReferences = await load('admin-references.ts');
 const notifyResults = await load('notify-results.ts');
 const askRatings = await load('ask-ratings.ts');
@@ -1660,6 +1661,51 @@ await test('yangi oila a\'zosi qo\'shiladi va tanlanadi', async () => {
   assert.ok(data.patients.some((p) => p.id === patient.id));
 });
 
+await test('saytda qo\'shilgan odamning ma\'lumotini tuzatish va olib tashlash mumkin', async () => {
+  const post = (body) =>
+    call(patientsApi, 'https://dimed.uz/api/patients', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: sessionCookie },
+      body: JSON.stringify(body),
+    });
+
+  const added = await (
+    await post({ action: 'add', firstName: 'Xato', lastName: 'Yozilgan', birthDate: '2015-05-05' })
+  ).json();
+  const id = added.patient.id;
+
+  const bad = await post({ action: 'edit', id, firstName: 'Anvar', lastName: '', birthDate: '2015-05-05' });
+  assert.equal(bad.status, 400, 'familiyasiz tuzatib bo\'lmaydi');
+
+  const edited = await post({
+    action: 'edit', id, firstName: 'Anvar', lastName: 'Yo\'ldoshev', patronymic: 'Bahodir o\'g\'li',
+    birthDate: '2014-04-04',
+  });
+  assert.equal(edited.status, 200);
+  const { patient } = await edited.json();
+  assert.equal(patient.name, 'Yo\'ldoshev Anvar Bahodir o\'g\'li');
+  assert.equal(patient.birthDate, '2014-04-04');
+  assert.equal(
+    tableOf('test_users').get('777').patients.find((p) => p.id === id).first_name,
+    'Anvar',
+    'tuzatish bazaga yoziladi',
+  );
+
+  // Klinika (1C) bemorining ismini sayt o'zgartirmaydi.
+  const clinic = await post({ action: 'edit', id: '30001', firstName: 'X', lastName: 'Y', birthDate: '1990-01-01' });
+  assert.equal(clinic.status, 404);
+  const clinicRemove = await post({ action: 'remove', id: '30001' });
+  assert.equal(clinicRemove.status, 404, '1C bemorini o\'chirib bo\'lmaydi');
+
+  assert.equal((await post({ action: 'remove', id })).status, 200);
+  const data = await (await call(patientsApi, 'https://dimed.uz/api/patients', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  assert.ok(!data.patients.some((p) => p.id === id), 'olib tashlangan odam ro\'yxatda yo\'q');
+  assert.notEqual(data.activeId, id, 'tanlov tozalanadi');
+  assert.equal((await post({ action: 'remove', id })).status, 404, 'ikkinchi marta topilmaydi');
+});
+
 await test('boshqa bemorni tanlash saqlanadi', async () => {
   const res = await call(patientsApi, 'https://dimed.uz/api/patients', {
     method: 'POST',
@@ -2270,6 +2316,94 @@ await test('dam olish kuni belgilansa slot qolmaydi, kabinet buni ko\'rsatadi', 
 });
 
 // ================= Admin panel =================
+console.log('\nTa\'til va boshqa vaqtda ishlash:');
+const offPost = (obj) =>
+  call(doctorOff, 'https://dimed.uz/api/doctor-off', {
+    ...jsonBody(obj),
+    headers: { 'content-type': 'application/json', cookie: doctorCookie },
+  });
+const apptAt = (day, time, telegramId) =>
+  seed('test_appointments', `ashurov#${day}|${time}`, {
+    doctor_day: `ashurov#${day}`, time, doctor_id: 'ashurov', date: day,
+    phone: '+998905550006', telegram_id: telegramId, starts_at: toInstant(day, time).toISOString(),
+    status: 'booked', price: 70000, created_at: new Date().toISOString(),
+  });
+
+await test('bir necha kunlik ta\'til: hamma kun yopiladi, navbatlar bekor qilinadi', async () => {
+  const today = toTashkent(new Date()).dateKey;
+  const first = addDays(today, 60);
+  const last = addDays(today, 62);
+  apptAt(first, '10:00', '66701');
+  apptAt(last, '11:00', '66702');
+  telegramCalls.length = 0;
+
+  const res = await offPost({ from: first, to: last, reason: 'Ta\'tilda' });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.days, 3);
+  assert.equal(data.cancelled, 2);
+  assert.equal(data.notified, 2);
+
+  for (const day of [first, addDays(today, 61), last]) {
+    const row = tableOf('test_schedules').get(`ashurov|${day}`);
+    assert.equal(row.day_off, true, `${day} yopilgan bo\'lishi kerak`);
+    assert.equal(row.off_reason, 'Ta\'tilda');
+  }
+  assert.equal(tableOf('test_appointments').get(`ashurov#${first}|10:00`).status, 'cancelled_by_clinic');
+  assert.equal(tableOf('test_appointments').get(`ashurov#${last}|11:00`).status, 'cancelled_by_clinic');
+  assert.ok(telegramCalls.some((c) => c.body.chat_id === '66701'));
+  assert.ok(telegramCalls.some((c) => c.body.chat_id === '66702'));
+});
+
+await test('ta\'til sanalari tekshiriladi', async () => {
+  const today = toTashkent(new Date()).dateKey;
+  const reversed = await offPost({ from: addDays(today, 10), to: addDays(today, 5) });
+  assert.equal(reversed.status, 400, 'oxirgi kun boshidan oldin bo\'lmaydi');
+
+  const tooLong = await offPost({ from: addDays(today, 5), to: addDays(today, 80) });
+  assert.equal(tooLong.status, 400, 'bir martada juda uzun oraliq rad etiladi');
+
+  const far = await offPost({ from: addDays(today, 85), to: addDays(today, 95) });
+  assert.equal(far.status, 400, '90 kundan uzoqqa kiritib bo\'lmaydi');
+
+  const past = await offPost({ from: '2020-01-01', to: '2020-01-05' });
+  assert.equal(past.status, 400);
+});
+
+await test('boshqa vaqtda ishlash: faqat sig\'maydigan navbat bekor qilinadi', async () => {
+  const day = addDays(toTashkent(new Date()).dateKey, 70);
+  apptAt(day, '09:00', '66703'); // 08:00–12:00 ga sig\'adi
+  apptAt(day, '15:00', '66704'); // sig\'maydi
+  telegramCalls.length = 0;
+
+  const res = await offPost({ date: day, shifts: [{ start: '08:00', end: '12:00' }] });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.cancelled, 1);
+  assert.equal(tableOf('test_appointments').get(`ashurov#${day}|09:00`).status, 'booked');
+  assert.equal(tableOf('test_appointments').get(`ashurov#${day}|15:00`).status, 'cancelled_by_clinic');
+  assert.ok(telegramCalls.some((c) => c.body.chat_id === '66704' && c.body.text.includes('o‘zgardi')));
+  assert.ok(!telegramCalls.some((c) => c.body.chat_id === '66703'), 'sig\'adigan bemorga xabar bormaydi');
+
+  const row = tableOf('test_schedules').get(`ashurov|${day}`);
+  assert.equal(row.day_off, false, 'kun yopiq emas');
+  assert.deepEqual(row.shifts, [{ start: '08:00', end: '12:00' }]);
+
+  const open = await (await call(slots, `https://dimed.uz/api/slots?doctor=ashurov&date=${day}`)).json();
+  const times = open.slots.map((s) => s.time);
+  assert.equal(times[0], '08:00');
+  assert.ok(times.every((t) => t < '12:00'), `faqat 08:00–12:00 oralig'i: ${times}`);
+  assert.ok(!times.includes('15:00'), 'tushdan keyingi vaqtlar yo\'q');
+});
+
+await test('boshqa vaqt noto\'g\'ri bo\'lsa rad etiladi', async () => {
+  const day = addDays(toTashkent(new Date()).dateKey, 71);
+  const res = await offPost({ date: day, shifts: [{ start: '12:00', end: '09:00' }] });
+  assert.equal(res.status, 400);
+  const empty = await offPost({ date: day, shifts: [] });
+  assert.equal(empty.status, 400);
+});
+
 const adminCookie = createSessionCookie({ phone: '+998900424242', userId: '424242' }).split(';')[0];
 
 console.log('\nAdmin panel:');
@@ -2466,6 +2600,71 @@ await test('admin-prices: shifokor qabuli narxi', async () => {
     headers: { 'content-type': 'application/json', cookie: adminCookie },
     body: JSON.stringify({ kind: 'doctor', id: 'ashurov', price: 70000 }),
   });
+});
+
+console.log('\n1C narxlarni yuklaydi:');
+const lcPricesPost = (body, key = 'lc-secret') =>
+  callRaw(lcPrices, 'https://dimed.uz/api/lc-prices', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...(key ? { 'x-api-key': key } : {}) },
+    body: JSON.stringify(body),
+  });
+
+await test('lc-prices: kalitsiz va noto\'g\'ri kalit rad etiladi', async () => {
+  assert.equal((await lcPricesPost({ analyses: [{ code: '1', title: 'X', price: 1 }] }, '')).status, 401);
+  assert.equal((await lcPricesPost({ analyses: [{ code: '1', title: 'X', price: 1 }] }, 'xato')).status, 401);
+  const get = await callRaw(lcPrices, 'https://dimed.uz/api/lc-prices', { headers: { 'x-api-key': 'lc-secret' } });
+  assert.equal(get.status, 405);
+});
+
+await test('lc-prices: yangi tahlil qo\'shiladi, mavjudi yangilanadi (guruh va holat saqlanadi)', async () => {
+  // 19 — admin yashirgan (active: false), guruhi bor.
+  seed('test_prices', 'analysis#19', {
+    ...tableOf('test_prices').get('analysis#19'), group: 'Biokimyoviy qon tahlillari', active: false,
+  });
+  const res = await lcPricesPost({
+    analyses: [
+      { code: '19', title: 'Glyukoza (1C)', price: 50000 },
+      { code: '77', title: 'Yangi tahlil', group: 'Qon', duration: '1 kun', price: 12000 },
+    ],
+    doctors: [{ id: 'ashurov', price: 70000 }, { id: 'yoq-shifokor', price: 1000 }],
+  });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.created, 1);
+  assert.equal(data.updated, 1);
+  assert.equal(data.doctorsUpdated, 1);
+  assert.deepEqual(data.unknownDoctors, ['yoq-shifokor']);
+
+  const old = tableOf('test_prices').get('analysis#19');
+  assert.equal(old.price, 50000);
+  assert.equal(old.title, 'Glyukoza (1C)');
+  assert.equal(old.group, 'Biokimyoviy qon tahlillari', '1C guruh bermasa saytdagi qoladi');
+  assert.equal(old.active, false, 'yashirilgan tahlil 1C yuklaganda qayta ochilmaydi');
+  assert.equal(old.source, '1c');
+
+  const created = tableOf('test_prices').get('analysis#77');
+  assert.equal(created.price, 12000);
+  assert.equal(created.active, true);
+
+  const pub = await (await call(pricesApi, 'https://dimed.uz/api/prices')).json();
+  assert.equal(pub.analyses.find((a) => a.code === '77').title, 'Yangi tahlil');
+  assert.equal(tableOf('test_doctors').get('ashurov').price, 70000);
+});
+
+await test('lc-prices: noto\'g\'ri narx bo\'lsa hech narsa yozilmaydi', async () => {
+  const res = await lcPricesPost({
+    analyses: [
+      { code: '88', title: 'To\'g\'ri', price: 1000 },
+      { code: '89', title: 'Kasr narx', price: 10.5 },
+    ],
+  });
+  assert.equal(res.status, 400);
+  assert.equal(tableOf('test_prices').get('analysis#88'), undefined, 'yarim yuklanmaydi');
+
+  assert.equal((await lcPricesPost({})).status, 400, 'bo\'sh so\'rov');
+  assert.equal((await lcPricesPost({ analyses: [{ code: 'a b', title: 'X', price: 1 }] })).status, 400, 'kod noto\'g\'ri');
+  assert.equal((await lcPricesPost({ doctors: [{ id: 'ashurov', price: -1 }] })).status, 400);
 });
 
 console.log('\nAdmin — referens (me\'yoriy) oraliqlari (F4):');
@@ -3730,6 +3929,34 @@ await test('AppointmentKey bo\'lsa telefon mos kelmasa ham bog\'lanadi', async (
   await call(syncAttendance, 'https://dimed.uz/api/sync-attendance');
 
   assert.equal(tableOf('test_appointments').get(`ashurov#${ATT_TODAY}|07:35`).status, 'done');
+});
+
+console.log('\nXatolar log-botga:');
+await test('bir xil xato 10 daqiqada bir marta yuboriladi', async () => {
+  const { logToAdmin } = await import(pathToFileURL(join(fnDir, 'lib', 'telegram.ts')).href);
+  process.env.TELEGRAM_LOG_BOT_TOKEN = 'log-bot-token';
+  process.env.TELEGRAM_LOG_CHAT_ID = '-100500';
+  const logCalls = () => telegramCalls.filter((c) => c.url.includes('log-bot-token'));
+  telegramCalls.length = 0;
+  try {
+    const err = () => new Error('Requested resource not found');
+    for (let i = 0; i < 5; i++) await logToAdmin('auth-start', err());
+    assert.equal(logCalls().length, 1, 'beshta bir xil xato — bitta xabar');
+
+    await logToAdmin('auth-start', new Error('Boshqa xato'));
+    assert.equal(logCalls().length, 2, 'boshqa matn alohida yuboriladi');
+
+    await logToAdmin('book', err());
+    assert.equal(logCalls().length, 3, 'boshqa funksiyadagi xato alohida yuboriladi');
+
+    const notFound = Object.assign(new Error('x'), { name: 'ResourceNotFoundException' });
+    await logToAdmin('auth-start', notFound);
+    const sent = logCalls().at(-1).body.text;
+    assert.ok(sent.includes('create-tables'), 'jadval topilmasa yechim aytiladi');
+  } finally {
+    delete process.env.TELEGRAM_LOG_BOT_TOKEN;
+    delete process.env.TELEGRAM_LOG_CHAT_ID;
+  }
 });
 
 stopFakeDynamo();

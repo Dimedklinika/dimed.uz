@@ -32,7 +32,7 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
           </a>
           <p class="hint" id="getStatus" role="status" aria-live="polite"></p>
         </li>
-        <li>
+        <li id="stepTwo" class="locked">
           <b data-t="signin.page.enterCode">{uz('signin.page.enterCode')}</b>
           <label class="fld-inline">
             <span class="fld-lbl" data-t="signin.page.phoneLabel">{uz('signin.page.phoneLabel')}</span>
@@ -119,6 +119,7 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
   import { birthDateSelectsHtml, readBirthDate } from '../lib/birthdate';
   import { getLang, applyPageLang } from '../lib/lang';
   import { t } from '../data/i18n';
+  import { setupCodeFlow } from '../lib/login-flow';
 
   const lang = getLang();
   const tr = (key: Parameters<typeof t>[0], vars?: Parameters<typeof t>[2]) => t(key, lang, vars);
@@ -212,87 +213,28 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
   });
 
   // ---------- "Kodni olish" (deep-link + poll) ----------
-  /*
-    Bir tugma: botga o'tadi va kod keladi. Bot /start kirish_<nonce> ni
-    ko'rib telefonni kirish sessiyasiga yozadi (netlify auth-start,
-    lib/login.ts); sayt esa nonce'ni poll qilib, raqamni oldindan
-    to'ldiradi va kod maydonini fokuslaydi. Kod (OTP) baribir kiritiladi.
-  */
   const getCode = document.getElementById('getCode') as HTMLAnchorElement;
-  const getStatus = document.getElementById('getStatus') as HTMLParagraphElement;
-  let pollTimer: ReturnType<typeof setInterval> | undefined;
-  let pollUntil = 0;
+  const stepTwo = document.getElementById('stepTwo') as HTMLElement;
 
-  const setGetStatus = (text: string, kind: 'ok' | 'error' | '' = '') => {
-    getStatus.textContent = text;
-    getStatus.className = `hint${kind ? ` ${kind}` : ''}`;
-  };
-
-  const stopPolling = () => {
-    if (pollTimer) clearInterval(pollTimer);
-    pollTimer = undefined;
-  };
-
-  async function pollOnce(nonce: string): Promise<void> {
-    if (Date.now() > pollUntil) {
-      stopPolling();
-      return;
-    }
-    try {
-      const res = await fetch(`/api/auth-start?nonce=${encodeURIComponent(nonce)}`, {
-        credentials: 'same-origin',
-      });
-      if (!res.ok) return;
-      const data = (await res.json()) as { status: string; phone?: string | null };
-      if (data.status === 'ready') {
-        stopPolling();
-        if (data.phone) phoneInput.value = formatPhone(data.phone);
-        setGetStatus(tr('signin.page.codeSent'), 'ok');
-        const label = getCode.querySelector('span');
-        if (label) label.textContent = tr('signin.page.getCodeAgain');
-        (phoneInput.value ? otpInputs[0] : phoneInput)?.focus();
-      } else if (data.status === 'expired') {
-        stopPolling();
-        setGetStatus(tr('signin.page.expired'), 'error');
-      }
-    } catch {
-      /* tarmoq — keyingi urinishda qayta so'raladi */
-    }
-  }
-
-  getCode.addEventListener('click', async (e) => {
-    /*
-      Popup bloklovchisi ishga tushmasin: bo'sh oynani darhol (foydalanuvchi
-      bosishi ichida) ochamiz, nonce olgach uni Telegramga yo'naltiramiz.
-      Bloklansa — o'sha oynada (fallback: oddiy bot havolasi) ochiladi.
-    */
-    e.preventDefault();
-    const tgWin = window.open('about:blank', '_blank');
-    setGetStatus(tr('signin.page.opening'));
-
-    let deepLink = getCode.href; // fallback: oddiy bot havolasi
-    let nonce: string | null = null;
-    try {
-      const res = await fetch('/api/auth-start', { method: 'POST', credentials: 'same-origin' });
-      if (res.ok) {
-        const data = (await res.json()) as { nonce: string; deepLink: string };
-        nonce = data.nonce;
-        deepLink = data.deepLink;
-      }
-    } catch {
-      /* auth-start ishlamasa — oddiy bot havolasi ochiladi */
-    }
-
-    if (tgWin) tgWin.location.href = deepLink;
-    else window.location.href = deepLink;
-
-    if (nonce) {
-      setGetStatus(tr('signin.page.waiting'));
-      stopPolling();
-      pollUntil = Date.now() + 3.5 * 60 * 1000;
-      const n = nonce;
-      pollTimer = setInterval(() => void pollOnce(n), 2500);
-    }
+  /*
+    2-qadam (telefon va kod) avval xiralashtirilgan: foydalanuvchi avval
+    «Kodni olish» ni bosishi kerakligi ko'rinib turadi. Maydonlar bloklanmaydi —
+    kodi allaqachon borlar to'g'ridan-to'g'ri kirita oladi.
+  */
+  setupCodeFlow({
+    button: getCode,
+    label: getCode.querySelector('span'),
+    status: document.getElementById('getStatus') as HTMLParagraphElement,
+    phone: phoneInput,
+    codeFocus: () => otpInputs[0]?.focus(),
+    onStart: () => stepTwo.classList.remove('locked'),
+    text: {
+      opening: tr('signin.page.opening'),
+      waiting: tr('signin.page.waiting'),
+      codeSent: tr('signin.page.codeSent'),
+      expired: tr('signin.page.expired'),
+      getCodeAgain: tr('signin.page.getCodeAgain'),
+    },
   });
 
   // ---------- "Kim kirmoqda?" ----------
@@ -543,6 +485,12 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
     width: 100%;
     margin-top: 4px;
     font-size: 16px;
+  }
+
+  /* 2-qadam "Kodni olish" bosilguncha xira — tartib ko'rinib tursin */
+  .steps li.locked :is(.fld-inline, .otp-row, b) {
+    opacity: 0.5;
+    transition: opacity 0.2s;
   }
 
   .hint {

@@ -385,3 +385,19 @@ Yuqoridagi ikki yo'nalish uchun kerak:
    (4.3) — qaysi nomda va qachon yuboriladi.
 4. Chastota: 5 yoki 10 daqiqa; 1C serveri fayl rejimida emasligi
    tasdiqlansin.
+
+## Narxlarni 1C dan yuklash — `POST /api/lc-prices`
+
+Narxlar 1C da yuritiladi va saytga qo'lda ko'chirilmaydi. Sarlavha: `X-API-Key: <LC_API_KEY>`.
+
+```json
+{
+  "analyses": [{ "code": "00123", "title": "Umumiy qon tahlili", "group": "Qon", "duration": "1 kun", "price": 45000, "active": true }],
+  "doctors":  [{ "id": "ashurov", "price": 80000 }]
+}
+```
+
+- `analyses`: `code` bo'yicha qo'shiladi/yangilanadi; `group`, `duration`, `active` berilmasa saytdagi qiymat qoladi.
+- `doctors`: faqat mavjud shifokorning qabul narxi; topilmaganlari javobda `unknownDoctors`.
+- Bir so'rovda 500 tagacha; birorta narx noto'g'ri bo'lsa hech narsa yozilmaydi (400).
+- Javob: `{ ok, created, updated, doctorsUpdated, unknownDoctors }`.

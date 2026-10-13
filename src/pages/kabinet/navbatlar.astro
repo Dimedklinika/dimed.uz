@@ -8,34 +8,36 @@ import { t } from '../../data/i18n';
   title="Navbatlarim — Dimed klinikasi"
   description="Kelgusi va o‘tgan qabullaringiz, vaqtni ko‘chirish."
   eyebrow="Shaxsiy kabinet"
+  eyebrowKey="cab.eyebrow.patient"
   heading="Navbatlarim"
+  headingKey="cabinet.menu.appointments"
   area="patient"
   active="navbatlar"
 >
   <span class="phone-chip" id="phoneChip" slot="sub" hidden></span>
-  <a class="btn btn-sm" href="/#navbat-widget" slot="actions">Navbat olish</a>
+  <a class="btn btn-sm" href="/#navbat-widget" slot="actions" data-t="cabinet.menu.book">Navbat olish</a>
 
   <!--
     Bir telefonga oila a'zolari bog'langan bo'lishi mumkin. Shunda
     kimning qabuli ekanini ajratish uchun filtr chiqadi.
   -->
   <div class="who-bar" id="whoBar" hidden>
-    <span class="who-lab">Kim:</span>
+    <span class="who-lab" data-t="cab.who">Kim:</span>
     <div class="who-chips" id="whoChips"></div>
   </div>
 
-  <div id="loading" class="state">Yuklanmoqda…</div>
+  <div id="loading" class="state" data-t="common.loading">Yuklanmoqda…</div>
 
-  <SignInCard what={t('signin.what.appointments')} next="/kabinet/navbatlar" hidden />
+  <SignInCard what={t('signin.what.appointments')} whatKey="signin.what.appointments" next="/kabinet/navbatlar" hidden />
 
   <div id="content" class="grid" hidden>
     <div class="card glass">
-      <h2>Kelgusi qabullar</h2>
+      <h2 data-t="appt.upcoming">Kelgusi qabullar</h2>
       <div id="upcoming"></div>
     </div>
 
     <div class="card glass">
-      <h2>O‘tgan qabullar</h2>
+      <h2 data-t="appt.past">O‘tgan qabullar</h2>
       <div id="past"></div>
     </div>
   </div>
@@ -43,6 +45,12 @@ import { t } from '../../data/i18n';
 
 <script>
   import { showSignIn } from '../../lib/signin';
+  import { t } from '../../data/i18n';
+  import { getLang } from '../../lib/lang';
+  import { MONTHS as ALL_MONTHS } from '../../lib/birthdate';
+
+  const lang = getLang();
+  const tr = (key: Parameters<typeof t>[0]) => t(key, lang);
   type Appointment = {
     doctorId: string;
     doctorName: string;
@@ -61,27 +69,31 @@ import { t } from '../../data/i18n';
 
   type Slot = { time: string; free: boolean };
 
-  const MONTHS = [
-    'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
-    'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
-  ];
+  const MONTHS = ALL_MONTHS[lang];
+  const WD = tr('appt.weekdays').split(',');
 
-  const WD = ['Yak', 'Du', 'Se', 'Chor', 'Pay', 'Ju', 'Sh'];
-
+  // uz: "5-oktabr 2026", ru/en: "5 октября 2026"
   const fmtDate = (key: string) => {
     const [y, m, d] = key.split('-').map(Number);
-    return m && d ? `${d}-${MONTHS[m - 1]} ${y}` : key;
+    if (!m || !d) return key;
+    return lang === 'uz' ? `${d}-${MONTHS[m - 1]} ${y}` : `${d} ${MONTHS[m - 1]} ${y}`;
   };
 
-  const fmtPrice = (n: number) => n.toLocaleString('ru-RU').replace(/,/g, ' ') + ' soʻm';
+  const fmtPrice = (n: number) => `${n.toLocaleString('ru-RU').replace(/,/g, ' ')} ${t('lab.sum', lang)}`;
 
-  const statusLabel: Record<string, { text: string; cls: string }> = {
-    paid: { text: 'toʻlangan', cls: 'ok' },
-    booked: { text: 'band qilingan', cls: 'ok' },
-    done: { text: 'boʻlib oʻtgan', cls: 'muted' },
-    no_show: { text: 'kelmagan', cls: 'warn' },
-    moved: { text: 'koʻchirilgan', cls: 'warn' },
-    cancelled_by_clinic: { text: 'klinika bekor qildi', cls: 'warn' },
+  const STATUS_CLASS: Record<string, string> = {
+    paid: 'ok',
+    booked: 'ok',
+    done: 'muted',
+    no_show: 'warn',
+    moved: 'warn',
+    cancelled: 'warn',
+    cancelled_by_clinic: 'warn',
+  };
+  const statusOf = (status: string) => {
+    const key = `appt.status.${status}` as Parameters<typeof t>[0];
+    const known = status in STATUS_CLASS;
+    return { text: known ? tr(key) : status, cls: STATUS_CLASS[status] ?? 'muted' };
   };
 
   /** Ko'chirish oynasi ochilgan qabul: "doctorId|sana|vaqt". */
@@ -108,7 +120,7 @@ import { t } from '../../data/i18n';
 
     el('whoBar').hidden = false;
     el('whoChips').innerHTML = [
-      `<button class="who-chip${whoFilter ? '' : ' on'}" data-who="">Hammasi</button>`,
+      `<button class="who-chip${whoFilter ? '' : ' on'}" data-who="">${esc(tr('cab.all'))}</button>`,
       ...names.map(
         (n) => `<button class="who-chip${whoFilter === n ? ' on' : ''}" data-who="${esc(n)}">${esc(n)}</button>`,
       ),
@@ -137,7 +149,7 @@ import { t } from '../../data/i18n';
       if (!res.ok) throw new Error(String(res.status));
       data = await res.json();
     } catch {
-      el('loading').textContent = 'Ma’lumotlarni yuklab bo‘lmadi. Sahifani yangilang.';
+      el('loading').textContent = tr('cab.loadFailed');
       return;
     }
 
@@ -159,19 +171,19 @@ import { t } from '../../data/i18n';
 
     el('upcoming').innerHTML = upcoming.length
       ? upcoming.map(appointmentCard).join('')
-      : `<p class="empty">Hozircha kelgusi qabul yoʻq.<br><a class="btn btn-sm" href="/#navbat-widget">Navbat olish</a></p>`;
+      : `<p class="empty">${esc(tr('appt.noUpcoming'))}<br><a class="btn btn-sm" href="/#navbat-widget">${esc(tr('cabinet.menu.book'))}</a></p>`;
 
     el('past').innerHTML = past.length
       ? past
           .map((a) => {
-            const s = statusLabel[a.status] ?? { text: a.status, cls: 'muted' };
+            const s = statusOf(a.status);
             return `<div class="row"><span>${esc(a.doctorJob || a.doctorName)} — ${esc(a.doctorName)}${
               a.patientName ? `<small class="who">${esc(a.patientName)}</small>` : ''
             }</span>
                <span class="dt">${fmtDate(a.date)} · ${a.time} <span class="pill ${s.cls}">${s.text}</span></span></div>`;
           })
           .join('')
-      : '<p class="empty">Oʻtgan qabullar yoʻq.</p>';
+      : `<p class="empty">${esc(tr('appt.noPast'))}</p>`;
 
     // Qayta chizishdan keyin ochiq turgan ko'chirish oynasini tiklaymiz.
     if (openMove && panelOf(openMove)) loadSlots(openMove);
@@ -198,7 +210,7 @@ import { t } from '../../data/i18n';
     document.querySelector<T>(`[data-${attr}="${key}"]`);
 
   function appointmentCard(a: Appointment) {
-    const s = statusLabel[a.status] ?? { text: a.status, cls: 'muted' };
+    const s = statusOf(a.status);
     const key = keyOf(a);
 
     /*
@@ -209,11 +221,11 @@ import { t } from '../../data/i18n';
     */
     const move = a.canMove
       ? `<div class="appt-btns">
-           <button class="mv-btn" data-move="${key}">Vaqtni koʻchirish</button>
-           <button class="mv-btn danger" data-cancel="${key}">Bekor qilish</button>
+           <button class="mv-btn" data-move="${key}">${esc(tr('appt.move'))}</button>
+           <button class="mv-btn danger" data-cancel="${key}">${esc(tr('appt.cancel'))}</button>
          </div>
          <div class="mv" data-panel="${key}" hidden>
-           <div class="mv-lab">Yangi sana</div>
+           <div class="mv-lab">${esc(tr('appt.newDate'))}</div>
            <div class="mv-days" data-days="${key}"></div>
            <div class="mv-slots" data-slots="${key}"></div>
            <p class="mv-msg" data-msg="${key}" role="status" aria-live="polite"></p>
@@ -224,16 +236,16 @@ import { t } from '../../data/i18n';
       <div>
         <div class="nm">${esc(a.doctorName)}</div>
         <div class="dt">${esc(a.doctorJob)}</div>
-        ${a.serviceName ? `<div class="dt who">Xizmat: ${esc(a.serviceName)}</div>` : ''}
-        <div class="dt">${fmtDate(a.date)} · soat ${a.time}</div>
-        ${a.patientName ? `<div class="dt who">Bemor: ${esc(a.patientName)}</div>` : ''}
+        ${a.serviceName ? `<div class="dt who">${esc(tr('appt.service'))} ${esc(a.serviceName)}</div>` : ''}
+        <div class="dt">${fmtDate(a.date)} · ${esc(tr('appt.atTime'))} ${a.time}</div>
+        ${a.patientName ? `<div class="dt who">${esc(tr('appt.patient'))} ${esc(a.patientName)}</div>` : ''}
       </div>
       <div class="appt-foot">
         <span class="pill ${s.cls}">${s.text}</span>
         <span class="dt">${
           a.price === 0
-            ? 'bepul' // qayta ko'rik kabi bepul xizmat: "0 soʻm · kassada toʻlanadi" deyilmaydi
-            : `${fmtPrice(a.price)} · ${a.status === 'paid' ? 'onlayn toʻlangan' : 'kassada toʻlanadi'}`
+            ? tr('appt.free') // qayta ko'rik kabi bepul xizmat: "0 soʻm · kassada toʻlanadi" deyilmaydi
+            : `${fmtPrice(a.price)} · ${tr(a.status === 'paid' ? 'appt.paidOnline' : 'appt.payAtDesk')}`
         }</span>
       </div>
       ${move}
@@ -271,7 +283,7 @@ import { t } from '../../data/i18n';
 
     panel.hidden = false;
     renderDays(key);
-    box.innerHTML = '<span class="mv-hint">Yuklanmoqda…</span>';
+    box.innerHTML = `<span class="mv-hint">${esc(tr('common.loading'))}</span>`;
     setMoveMsg(key, '');
 
     const { doctor } = partsOf(key);
@@ -287,9 +299,9 @@ import { t } from '../../data/i18n';
         ? free
             .map((s) => `<button class="mv-slot" data-slot="${key}" data-time="${s.time}">${s.time}</button>`)
             .join('')
-        : `<span class="mv-hint">${data.reason ?? 'Bu kuni boʻsh vaqt yoʻq.'}</span>`;
+        : `<span class="mv-hint">${esc(data.reason ?? tr('appt.noSlots'))}</span>`;
     } catch {
-      box.innerHTML = '<span class="mv-hint">Slotlarni yuklab boʻlmadi.</span>';
+      box.innerHTML = `<span class="mv-hint">${esc(tr('appt.slotsFailed'))}</span>`;
     }
   }
 
@@ -307,9 +319,9 @@ import { t } from '../../data/i18n';
   */
   async function cancelAppointment(key: string) {
     const { doctor, date, time } = partsOf(key);
-    if (!confirm('Navbat bekor qilinsinmi? Vaqt boshqa bemorlarga ochiladi.')) return;
+    if (!confirm(tr('appt.cancelConfirm'))) return;
 
-    setMoveMsg(key, 'Bekor qilinmoqda…');
+    setMoveMsg(key, tr('appt.cancelling'));
     try {
       const res = await fetch('/api/cancel', {
         method: 'POST',
@@ -319,13 +331,13 @@ import { t } from '../../data/i18n';
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setMoveMsg(key, data.error ?? 'Bekor qilib boʻlmadi.', 'error');
+        setMoveMsg(key, data.error ?? tr('appt.cancelFailed'), 'error');
         return;
       }
       openMove = '';
       await load();
     } catch {
-      setMoveMsg(key, 'Internetga ulanishda muammo.', 'error');
+      setMoveMsg(key, tr('common.error.network'), 'error');
     }
   }
 
@@ -334,7 +346,7 @@ import { t } from '../../data/i18n';
     if (!toDate) return;
 
     const { doctor, date, time } = partsOf(key);
-    setMoveMsg(key, 'Koʻchirilmoqda…');
+    setMoveMsg(key, tr('appt.moving'));
 
     try {
       const res = await fetch('/api/reschedule', {
@@ -346,7 +358,7 @@ import { t } from '../../data/i18n';
       const data = (await res.json()) as { error?: string };
 
       if (!res.ok) {
-        setMoveMsg(key, data.error ?? 'Koʻchirib boʻlmadi.', 'error');
+        setMoveMsg(key, data.error ?? tr('appt.moveFailed'), 'error');
         if (res.status === 409) loadSlots(key);
         return;
       }
@@ -354,7 +366,7 @@ import { t } from '../../data/i18n';
       openMove = '';
       await load();
     } catch {
-      setMoveMsg(key, 'Internetga ulanishda muammo.', 'error');
+      setMoveMsg(key, tr('common.error.network'), 'error');
     }
   }
 

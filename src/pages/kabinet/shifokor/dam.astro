@@ -5,10 +5,10 @@ import { t } from '../../../data/i18n';
 ---
 
 <Cabinet
-  title="Ishga chiqa olmayman — Shifokor kabineti"
-  description="Kunni yopish: navbatlar bekor qilinadi, bemorlarga xabar boradi."
+  title="Ish kunini o‘zgartirish — Shifokor kabineti"
+  description="Kunni yopish, ta’tilga chiqish yoki boshqa vaqtda ishlash: bemorlarga xabar boradi."
   eyebrow="Shifokor kabineti"
-  heading="Ishga chiqa olmayman"
+  heading="Ish kunini o‘zgartirish"
   area="doctor"
   active="dam"
 >
@@ -16,14 +16,14 @@ import { t } from '../../../data/i18n';
 
   <div id="loading" class="state">Yuklanmoqda…</div>
 
-  <SignInCard what={t('signin.what.doctor')} next="/kabinet/shifokor/dam" id="denied" hidden />
+  <SignInCard what={t('signin.what.doctor')} whatKey="signin.what.doctor" next="/kabinet/shifokor/dam" id="denied" hidden />
 
   <div id="content" hidden>
     <div class="card glass">
       <h2>Sanani tanlang</h2>
       <p class="hint">
-        Kun yopiladi, o‘sha kundagi barcha navbatlar bekor qilinadi va har bir bemorga Telegram
-        orqali xabar boradi. Bemorlar boshqa kunga yozila oladi.
+        Kunni yoping yoki boshqa vaqtda ishlashingizni belgilang. Bekor bo‘lgan navbatlar
+        bo‘shaydi va har bir bemorga Telegram orqali xabar boradi — ular boshqa vaqtga yozila oladi.
       </p>
 
       <!-- 14 kunlik chip-kalendar: har kun alohida tugma, yopiq kunlar belgilangan -->
@@ -32,7 +32,47 @@ import { t } from '../../../data/i18n';
       <div class="day-info" id="dayInfo"></div>
 
       <div id="openForm">
-        <label class="fld">
+        <div class="modes" role="radiogroup" aria-label="Nima qilmoqchisiz?">
+          <label class="mode">
+            <input type="radio" name="mode" value="off" checked />
+            <span>Ishga chiqa olmayman</span>
+          </label>
+          <label class="mode">
+            <input type="radio" name="mode" value="hours" />
+            <span>Boshqa vaqtda ishlayman</span>
+          </label>
+        </div>
+
+        <div id="hoursBox" hidden>
+          <div class="time-row">
+            <label class="fld">
+              <span>Boshlanishi</span>
+              <input id="hFrom" type="time" step="900" value="09:00" />
+            </label>
+            <label class="fld">
+              <span>Tugashi</span>
+              <input id="hTo" type="time" step="900" value="13:00" />
+            </label>
+          </div>
+          <p class="note" style="margin-top: 0">
+            Faqat shu vaqt ichida navbat olinadi. Shu vaqtga to‘g‘ri kelmaydigan navbatlar bekor
+            qilinadi, qolganlari joyida turadi.
+          </p>
+        </div>
+
+        <label class="check">
+          <input id="multi" type="checkbox" />
+          <span>Bir necha kunga (ta’til)</span>
+        </label>
+        <div id="rangeBox" hidden>
+          <label class="fld">
+            <span>Oxirgi kun (shu kun ham kiradi)</span>
+            <input id="toDate" type="date" />
+          </label>
+          <p class="note" id="rangeInfo" style="margin-top: 8px"></p>
+        </div>
+
+        <label class="fld" style="margin-top: 16px">
           <span>Sabab (ixtiyoriy — bemorlarga yuboriladi)</span>
           <input id="reason" type="text" maxlength="120" placeholder="Masalan: kasal bo‘lib qoldim" />
         </label>
@@ -59,7 +99,36 @@ import { t } from '../../../data/i18n';
 
   let todayKey = '';
   let current = '';
+  let maxKey = '';
+  let defaultShifts: { start: string; end: string }[] = [];
   const closed = new Set<string>();
+
+  const mode = (): 'off' | 'hours' =>
+    document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value === 'hours'
+      ? 'hours'
+      : 'off';
+
+  /** Tugma matni va yordamchi bloklar tanlangan rejimga qarab o‘zgaradi. */
+  function syncForm() {
+    const hours = mode() === 'hours';
+    const multi = el<HTMLInputElement>('multi').checked;
+    el('hoursBox').hidden = !hours;
+    el('rangeBox').hidden = !multi;
+    el('offBtn').textContent = hours ? 'Vaqtni o‘zgartirish' : 'Ishga chiqa olmayman';
+    el('offBtn').classList.toggle('danger', !hours);
+
+    const to = el<HTMLInputElement>('toDate');
+    to.min = current;
+    to.max = maxKey;
+    if (multi && (!to.value || to.value < current)) to.value = current;
+    const days = multi && to.value >= current ? daysBetween(current, to.value) : 1;
+    el('rangeInfo').textContent = multi
+      ? `${fmtKey(current)} — ${fmtKey(to.value || current)}: ${days} kun.`
+      : '';
+  }
+
+  const daysBetween = (a: string, b: string) =>
+    Math.round((fromKey(b).getTime() - fromKey(a).getTime()) / 86_400_000) + 1;
 
   function renderDays() {
     let html = '';
@@ -105,6 +174,7 @@ import { t } from '../../../data/i18n';
     el('closedForm').hidden = !data.dayOff;
     setMsg('msg', '');
     setMsg('msg2', '');
+    syncForm();
   }
 
   async function loadDay(date: string) {
@@ -118,7 +188,27 @@ import { t } from '../../../data/i18n';
   el('offBtn').addEventListener('click', async () => {
     const btn = el<HTMLButtonElement>('offBtn');
     const reason = el<HTMLInputElement>('reason').value.trim();
-    if (!confirm(`${fmtKey(current)} kunidagi barcha navbatlar bekor qilinsinmi?\nBemorlarga xabar boradi.`)) return;
+    const hours = mode() === 'hours';
+    const multi = el<HTMLInputElement>('multi').checked;
+    const to = multi ? el<HTMLInputElement>('toDate').value || current : current;
+
+    if (to < current) return setMsg('msg', 'Oxirgi kun boshlanish kunidan oldin bo‘lmasin.', 'error');
+    const days = daysBetween(current, to);
+    const range = days > 1 ? `${fmtKey(current)} — ${fmtKey(to)} (${days} kun)` : fmtKey(current);
+
+    let shifts: { start: string; end: string }[] | undefined;
+    if (hours) {
+      const start = el<HTMLInputElement>('hFrom').value;
+      const end = el<HTMLInputElement>('hTo').value;
+      if (!start || !end) return setMsg('msg', 'Boshlanish va tugash vaqtini kiriting.', 'error');
+      if (end <= start) return setMsg('msg', 'Tugash vaqti boshlanishidan keyin bo‘lsin.', 'error');
+      shifts = [{ start, end }];
+    }
+
+    const question = hours
+      ? `${range}: faqat ${shifts![0]!.start}–${shifts![0]!.end} ishlaysizmi?\nShu vaqtga to‘g‘ri kelmaydigan navbatlar bekor qilinadi, bemorlarga xabar boradi.`
+      : `${range}: barcha navbatlar bekor qilinsinmi?\nBemorlarga xabar boradi.`;
+    if (!confirm(question)) return;
 
     btn.disabled = true;
     setMsg('msg', 'Bajarilmoqda…');
@@ -127,22 +217,32 @@ import { t } from '../../../data/i18n';
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ date: current, ...(reason ? { reason } : {}) }),
+        body: JSON.stringify({
+          from: current,
+          to,
+          ...(reason ? { reason } : {}),
+          ...(shifts ? { shifts } : {}),
+        }),
       });
       const data = (await res.json()) as { cancelled?: number; notified?: number; error?: string };
       if (!res.ok) return setMsg('msg', data.error ?? 'Bajarib boʻlmadi.', 'error');
+
+      const summary = `Bekor qilingan navbatlar: ${data.cancelled ?? 0}, xabar berildi: ${data.notified ?? 0}.`;
+      // Ta'tilda yopilgan kunlar chip-kalendarda ham belgilansin.
+      if (!hours) for (let d = current; d <= to; d = addDaysKey(d, 1)) closed.add(d);
       await loadDay(current);
-      setMsg(
-        'msg2',
-        `Kun yopildi. Bekor qilingan navbatlar: ${data.cancelled ?? 0}, xabar berildi: ${data.notified ?? 0}.`,
-        'ok',
-      );
+      if (hours) setMsg('msg', `Ish vaqti o‘zgardi (${range}). ${summary}`, 'ok');
+      else setMsg('msg2', `Yopildi: ${range}. ${summary}`, 'ok');
     } catch {
       setMsg('msg', 'Internetga ulanishda muammo.', 'error');
     } finally {
       btn.disabled = false;
     }
   });
+
+  document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener('change', syncForm));
+  el('multi').addEventListener('change', syncForm);
+  el('toDate').addEventListener('change', syncForm);
 
   el('openBtn').addEventListener('click', async () => {
     const btn = el<HTMLButtonElement>('openBtn');
@@ -172,6 +272,14 @@ import { t } from '../../../data/i18n';
     const data = res.data;
     todayKey = data.today;
     current = data.date;
+    maxKey = addDaysKey(todayKey, 90);
+    defaultShifts = data.doctor.shifts;
+    const first = defaultShifts[0];
+    const last = defaultShifts[defaultShifts.length - 1];
+    if (first && last) {
+      el<HTMLInputElement>('hFrom').value = first.start;
+      el<HTMLInputElement>('hTo').value = last.end;
+    }
     el('subtitle').textContent = `${data.doctor.name} · ${data.doctor.job}`;
     el('loading').hidden = true;
     el('content').hidden = false;
@@ -349,6 +457,59 @@ import { t } from '../../../data/i18n';
     color: var(--leaf);
   }
 
+  .modes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .mode {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 10px;
+    font-size: 13.5px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+
+  .mode:has(input:checked) {
+    border-color: var(--rose);
+    background: var(--rose-soft);
+    color: var(--rose);
+  }
+
+  .time-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 8px;
+  }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 16px 0 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  #rangeBox,
+  #hoursBox {
+    margin-top: 8px;
+  }
+
+  .fld input[type='date'],
+  .fld input[type='time'] {
+    min-height: 40px;
+  }
+
   .danger {
     width: 100%;
     background: transparent;
@@ -373,6 +534,10 @@ import { t } from '../../../data/i18n';
   }
 
   @media (max-width: 600px) {
+    .modes {
+      grid-template-columns: 1fr;
+    }
+
     .card {
       padding: 16px;
     }

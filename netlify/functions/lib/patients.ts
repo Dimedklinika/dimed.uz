@@ -463,3 +463,72 @@ export async function selectPatient(telegramId: string, id: string): Promise<voi
     }),
   );
 }
+
+/**
+ * Saytda qo'shilgan oila a'zosining ma'lumotini tuzatadi (noto'g'ri yozilgan
+ * ism yoki sana). 1C bemorlari bu yerdan o'zgarmaydi — ularning ismi 1C da
+ * yuritiladi (faqat tug'ilgan sanani `setPatientBirthDate` to'ldiradi).
+ *
+ * Qaytadi: yangilangan bemor; topilmasa `null`; 1C bemori bo'lsa yoki
+ * ma'lumot yaroqsiz bo'lsa — `{ error }`.
+ */
+export async function editLocalPatient(
+  telegramId: string,
+  id: string,
+  input: { firstName: unknown; lastName: unknown; patronymic?: unknown; birthDate?: unknown },
+): Promise<PatientOption | { error: string } | null> {
+  const user = await readUser(telegramId);
+  const existing = (user.patients ?? []).find((p) => p.id === id);
+  if (!existing) return null;
+
+  const first_name = cleanName(input.firstName);
+  const last_name = cleanName(input.lastName);
+  const patronymic = cleanName(input.patronymic);
+  if (!first_name || !last_name) return { error: 'Ism va familiya kerak' };
+
+  const birth = checkBirthDate(input.birthDate);
+  if (!birth.ok) return { error: birth.error };
+
+  const updated: LocalPatient = {
+    id,
+    first_name,
+    last_name,
+    ...(patronymic ? { patronymic } : {}),
+    birth_date: birth.value,
+  };
+  const list = (user.patients ?? []).map((p) => (p.id === id ? updated : p));
+  await db.send(
+    new UpdateCommand({
+      TableName: TABLES.users,
+      Key: { telegram_id: telegramId },
+      UpdateExpression: 'SET #p = :list',
+      ExpressionAttributeNames: { '#p': 'patients' },
+      ExpressionAttributeValues: { ':list': list },
+    }),
+  );
+
+  return { id, name: fullNameOf(updated), source: 'local', birthDate: birth.value };
+}
+
+/**
+ * Saytda xato qo'shilgan oila a'zosini ro'yxatdan olib tashlaydi.
+ * Oldingi navbatlarda ism nusxasi qoladi (tarix buzilmaydi). Tanlangan
+ * bemor shu bo'lsa — tanlov tozalanadi. 1C bemorini o'chirib bo'lmaydi.
+ */
+export async function removeLocalPatient(telegramId: string, id: string): Promise<boolean> {
+  const user = await readUser(telegramId);
+  const list = user.patients ?? [];
+  if (!list.some((p) => p.id === id)) return false;
+
+  await db.send(
+    new UpdateCommand({
+      TableName: TABLES.users,
+      Key: { telegram_id: telegramId },
+      UpdateExpression:
+        user.active_patient_id === id ? 'SET #p = :list REMOVE active_patient_id' : 'SET #p = :list',
+      ExpressionAttributeNames: { '#p': 'patients' },
+      ExpressionAttributeValues: { ':list': list.filter((p) => p.id !== id) },
+    }),
+  );
+  return true;
+}

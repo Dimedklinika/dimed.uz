@@ -94,9 +94,9 @@ const copy = {
 
   'how.eyebrow': { uz: 'Qanday ishlaydi', ru: 'Как это работает', en: 'How it works' },
   'how.title': {
-    uz: 'SMS yoʻq. Parol yoʻq. Faqat Telegram.',
-    ru: 'Без SMS. Без паролей. Только Telegram.',
-    en: 'No SMS. No passwords. Just Telegram.',
+    uz: 'Parolsiz kirish — faqat Telegram orqali.',
+    ru: 'Вход без пароля — только через Telegram.',
+    en: 'Passwordless sign-in — just Telegram.',
   },
   'how.text': {
     uz: 'Roʻyxatdan oʻtish, kirish, bron tasdigʻi va eslatmalar — hammasi bitta botda.',

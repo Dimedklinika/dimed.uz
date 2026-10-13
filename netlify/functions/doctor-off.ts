@@ -3,22 +3,40 @@ import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { db, TABLES } from './lib/db.ts';
 import { sessionFrom, doctorFor } from './lib/auth.ts';
-import { doctorDayKey } from './lib/slots.ts';
+import { doctorDayKey, slotTimes, type Shift } from './lib/slots.ts';
+import { checkShifts } from './lib/schedule.ts';
 import { dayAppointments, holdsSlot, type Appointment } from './lib/appointments.ts';
 import { isDateKey, toTashkent, addDays } from './lib/time.ts';
 import { sendMessage, logToAdmin, escapeHtml } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 
 const DEFAULT_REASON = 'Shifokor ishga chiqa olmadi';
+const DEFAULT_HOURS_REASON = 'Shifokorning ish vaqti o‘zgardi';
+/** Bir so'rovda eng ko'pi bilan shuncha kun (ta'til uchun yetarli). */
+const MAX_RANGE_DAYS = 60;
 
-type Body = { date?: string; reason?: string };
+type Body = {
+  date?: string;
+  /** Sana oralig'i (ta'til): `from` dan `to` gacha, ikkalasi ham kiradi. */
+  from?: string;
+  to?: string;
+  reason?: string;
+  /** Berilsa kun yopilmaydi — shu kunlarda boshqa vaqtda ishlanadi. */
+  shifts?: Shift[];
+};
 
 /**
- * POST /api/doctor-off — «bugun ishga chiqa olmayman».
+ * POST /api/doctor-off — «ishga chiqa olmayman» va «boshqa vaqtda ishlayman».
  *
- * Kunni dam olishga o'tkazadi, o'sha kunning barcha navbatlarini bekor
- * qiladi va har bir bemorga bot orqali uzr xabarini yuboradi. Bekor
- * qilingan slotlar bo'shaydi — bemorlar boshqa vaqtga yozila oladi.
+ * Bir kun (`date`) yoki bir necha kun (`from`..`to`, ta'til) uchun ishlaydi.
+ *
+ * - `shifts` yo'q: kunlar dam olishga o'tkaziladi, o'sha kunlarning barcha
+ *   navbatlari bekor qilinadi va har bir bemorga bot orqali uzr xabari
+ *   yuboriladi. Bekor qilingan slotlar bo'shaydi — bemorlar boshqa kunga
+ *   yozila oladi.
+ * - `shifts` bor: kunlar uchun alohida jadval qo'yiladi. Yangi vaqtga
+ *   to'g'ri kelmaydigan navbatlargina bekor qilinadi (bemorga xabar bilan),
+ *   qolganlari joyida turadi.
  */
 export default async (request: Request, _context: Context): Promise<Response> => {
   if (request.method !== 'POST') return error('Faqat POST', 405);
@@ -32,52 +50,134 @@ export default async (request: Request, _context: Context): Promise<Response> =>
 
     const body = (await request.json().catch(() => ({}))) as Body;
     const today = toTashkent(new Date()).dateKey;
-    const date = body.date ?? today;
-    const reason = body.reason?.trim() || DEFAULT_REASON;
+    const from = body.from ?? body.date ?? today;
+    const to = body.to ?? from;
+    const hours = body.shifts !== undefined;
+    const reason = body.reason?.trim() || (hours ? DEFAULT_HOURS_REASON : DEFAULT_REASON);
 
-    if (!isDateKey(date)) return error('date YYYY-MM-DD ko‘rinishida bo‘lishi kerak');
-    if (date < today) return error('O‘tgan kunni o‘zgartirib bo‘lmaydi');
-    if (date > addDays(today, 90)) return error('90 kundan uzoqqa jadval kiritib bo‘lmaydi');
+    if (!isDateKey(from) || !isDateKey(to)) return error('Sana YYYY-MM-DD ko‘rinishida bo‘lishi kerak');
+    if (from < today) return error('O‘tgan kunni o‘zgartirib bo‘lmaydi');
+    if (to < from) return error('Oxirgi sana boshlanish sanasidan oldin bo‘lmasin');
+    if (to > addDays(today, 90)) return error('90 kundan uzoqqa jadval kiritib bo‘lmaydi');
 
-    const now = new Date();
-
-    /*
-      Avval kun yopiladi — shundan keyin bekor qilish davomida yangi
-      bemor bo'shab qolgan slotni ololmaydi.
-    */
-    await db.send(
-      new UpdateCommand({
-        TableName: TABLES.schedules,
-        Key: { doctor_id: doctor.doctor_id, date },
-        UpdateExpression:
-          'SET day_off = :on, shifts = :none, off_reason = :reason, updated_at = :now',
-        ExpressionAttributeValues: {
-          ':on': true,
-          ':none': [],
-          ':reason': reason,
-          ':now': now.toISOString(),
-        },
-      }),
-    );
-
-    const active = (await dayAppointments(doctor.doctor_id, date)).filter((a) =>
-      holdsSlot(a, now),
-    );
-
-    let cancelled = 0;
-    let notified = 0;
-    for (const appointment of active) {
-      if (!(await cancel(doctor.doctor_id, date, appointment, now))) continue;
-      cancelled++;
-      if (await tellPatient(appointment, doctor.name, date, reason)) notified++;
+    const days: string[] = [];
+    for (let d = from; d <= to; d = addDays(d, 1)) days.push(d);
+    if (days.length > MAX_RANGE_DAYS) {
+      return error(`Bir marta ko‘pi bilan ${MAX_RANGE_DAYS} kun kiritish mumkin`);
     }
 
-    return json({ ok: true, date, reason, cancelled, notified });
+    let shifts: Shift[] | null = null;
+    if (hours) {
+      const checked = checkShifts(body.shifts);
+      if (!checked.ok) return error(checked.message);
+      shifts = checked.shifts;
+    }
+
+    const now = new Date();
+    let cancelled = 0;
+    let notified = 0;
+    for (const date of days) {
+      const result = shifts
+        ? await changeHours(doctor, date, shifts, reason, now)
+        : await closeDay(doctor, date, reason, now);
+      cancelled += result.cancelled;
+      notified += result.notified;
+    }
+
+    return json({
+      ok: true,
+      date: from,
+      from,
+      to,
+      days: days.length,
+      reason,
+      cancelled,
+      notified,
+    });
   } catch (err) {
     await logToAdmin('doctor-off', err);
     return error('Kunni bekor qilishda xatolik. Birozdan so‘ng urinib ko‘ring.', 500);
   }
 };
+
+type DoctorRow = NonNullable<Awaited<ReturnType<typeof doctorFor>>>;
+
+type DayResult = { cancelled: number; notified: number };
+
+/** Bir kunni yopadi: navbatlar bekor qilinadi, bemorlarga xabar ketadi. */
+async function closeDay(
+  doctor: DoctorRow,
+  date: string,
+  reason: string,
+  now: Date,
+): Promise<DayResult> {
+  /*
+    Avval kun yopiladi — shundan keyin bekor qilish davomida yangi
+    bemor bo'shab qolgan slotni ololmaydi.
+  */
+  await db.send(
+    new UpdateCommand({
+      TableName: TABLES.schedules,
+      Key: { doctor_id: doctor.doctor_id, date },
+      UpdateExpression: 'SET day_off = :on, shifts = :none, off_reason = :reason, updated_at = :now',
+      ExpressionAttributeValues: {
+        ':on': true,
+        ':none': [],
+        ':reason': reason,
+        ':now': now.toISOString(),
+      },
+    }),
+  );
+
+  return cancelAppointments(doctor, date, reason, now, () => true);
+}
+
+/**
+ * Kun uchun alohida smena qo'yadi (kun ochiq qoladi). Yangi smenaga
+ * to'g'ri kelmaydigan navbatlar bekor qilinadi.
+ */
+async function changeHours(
+  doctor: DoctorRow,
+  date: string,
+  shifts: Shift[],
+  reason: string,
+  now: Date,
+): Promise<DayResult> {
+  await db.send(
+    new UpdateCommand({
+      TableName: TABLES.schedules,
+      Key: { doctor_id: doctor.doctor_id, date },
+      // `off_reason` olib tashlanadi: kun yopiq emas, eski sabab qolib ketmasin.
+      UpdateExpression:
+        'SET day_off = :off, shifts = :shifts, updated_at = :now REMOVE off_reason',
+      ExpressionAttributeValues: { ':off': false, ':shifts': shifts, ':now': now.toISOString() },
+    }),
+  );
+
+  const keep = new Set(slotTimes(shifts, doctor.slot_minutes));
+  return cancelAppointments(doctor, date, reason, now, (a) => !keep.has(a.time));
+}
+
+async function cancelAppointments(
+  doctor: DoctorRow,
+  date: string,
+  reason: string,
+  now: Date,
+  shouldCancel: (appointment: Appointment) => boolean,
+): Promise<DayResult> {
+  const active = (await dayAppointments(doctor.doctor_id, date)).filter(
+    (a) => holdsSlot(a, now) && shouldCancel(a),
+  );
+
+  let cancelled = 0;
+  let notified = 0;
+  for (const appointment of active) {
+    if (!(await cancel(doctor.doctor_id, date, appointment, now))) continue;
+    cancelled++;
+    if (await tellPatient(appointment, doctor.name, date, reason)) notified++;
+  }
+  return { cancelled, notified };
+}
 
 /**
  * Bitta yozuvni bekor qiladi. Shart — holat biz o'qiganidan
