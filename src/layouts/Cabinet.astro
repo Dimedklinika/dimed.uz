@@ -1,5 +1,6 @@
 ---
 import Base from './Base.astro';
+import type { MessageKey } from '../data/i18n';
 
 /*
   Kabinet sahifalarining umumiy qolipi (C1): sarlavha, bo'lim ichidagi
@@ -13,17 +14,24 @@ interface Props {
   description?: string;
   eyebrow: string;
   heading: string;
+  /**
+   * Sarlavha va ustki yozuv uchun i18n kalitlari. Berilsa matn brauzerda
+   * tanlangan tilga almashtiriladi (bemor sahifalari uch tilda); berilmasa
+   * — o'zbekcha qoladi (xodimlar sahifalari).
+   */
+  eyebrowKey?: MessageKey;
+  headingKey?: MessageKey;
   area: Area;
   active: string;
 }
 
-const { title, description, eyebrow, heading, area, active } = Astro.props;
+const { title, description, eyebrow, heading, eyebrowKey, headingKey, area, active } = Astro.props;
 
-const tabs: Record<Area, { key: string; href: string; label: string }[]> = {
+const tabs: Record<Area, { key: string; href: string; label: string; i18n?: MessageKey }[]> = {
   patient: [
-    { key: 'navbatlar', href: '/kabinet/navbatlar', label: 'Navbatlarim' },
-    { key: 'tahlillar', href: '/kabinet/tahlillar', label: 'Tahlillarim' },
-    { key: 'sozlamalar', href: '/kabinet/sozlamalar', label: 'Sozlamalar' },
+    { key: 'navbatlar', href: '/kabinet/navbatlar', label: 'Navbatlarim', i18n: 'cabinet.menu.appointments' },
+    { key: 'tahlillar', href: '/kabinet/tahlillar', label: 'Tahlillarim', i18n: 'cabinet.menu.results' },
+    { key: 'sozlamalar', href: '/kabinet/sozlamalar', label: 'Sozlamalar', i18n: 'cabinet.menu.settings' },
   ],
   doctor: [
     { key: 'bugun', href: '/kabinet/shifokor', label: 'Bugungi navbatlar' },
@@ -45,8 +53,8 @@ const tabs: Record<Area, { key: string; href: string; label: string }[]> = {
   <section class="wrap page">
     <div class="head">
       <div>
-        <div class="eyebrow">{eyebrow}</div>
-        <h1>{heading}</h1>
+        <div class="eyebrow" data-t={eyebrowKey}>{eyebrow}</div>
+        <h1 data-t={headingKey}>{heading}</h1>
         <slot name="sub" />
       </div>
       <div class="head-actions">
@@ -56,7 +64,7 @@ const tabs: Record<Area, { key: string; href: string; label: string }[]> = {
 
     <nav class="tabs" data-cabinet-tabs aria-label="Kabinet bo‘limlari">
       {tabs[area].map((t) => (
-        <a class:list={['tab', { on: t.key === active }]} href={t.href} aria-current={t.key === active ? 'page' : undefined}>
+        <a class:list={['tab', { on: t.key === active }]} href={t.href} data-t={t.i18n} aria-current={t.key === active ? 'page' : undefined}>
           {t.label}
         </a>
       ))}
@@ -65,6 +73,18 @@ const tabs: Record<Area, { key: string; href: string; label: string }[]> = {
     <slot />
   </section>
 </Base>
+
+<script>
+  import { getLang, applyPageLang } from '../lib/lang';
+
+  /*
+    Kabinet sahifalari serverda o'zbekcha yoziladi; til faqat brauzerda
+    ma'lum. `data-t` belgili matnlar (sarlavha, tablar, qotirilgan yozuvlar)
+    shu yerda tanlangan tilga almashtiriladi.
+  */
+  const lang = getLang();
+  if (lang !== 'uz') applyPageLang(lang);
+</script>
 
 <style>
   .page {

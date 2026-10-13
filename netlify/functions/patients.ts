@@ -5,6 +5,8 @@ import {
   addLocalPatient,
   selectPatient,
   setPatientBirthDate,
+  editLocalPatient,
+  removeLocalPatient,
   checkBirthDate,
 } from './lib/patients.ts';
 import { logToAdmin } from './lib/telegram.ts';
@@ -22,6 +24,9 @@ import { hitLimit, tooMany } from './lib/rate-limit.ts';
  * POST — { action: "select", id } yoki
  *        { action: "add", firstName, lastName, patronymic?, birthDate } yoki
  *        { action: "birthDate", id, birthDate } — mavjud bemorga sana
+ *        { action: "edit", id, firstName, lastName, patronymic?, birthDate } —
+ *          saytda qo'shilgan odamning ma'lumotini tuzatish
+ *        { action: "remove", id } — saytda xato qo'shilgan odamni olib tashlash
  */
 /** Bir hisobdan bir soatda shuncha so'rov — «bolg'alash»ga qarshi. */
 const MAX_PER_HOUR = 120;
@@ -77,6 +82,26 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       const patient = await setPatientBirthDate(session.phone, session.userId, body.id, birth.value);
       if (!patient) return error('Bunday bemor topilmadi', 404);
       return json({ ok: true, patient });
+    }
+
+    if (body.action === 'edit') {
+      if (!body.id) return error('id kerak');
+      const edited = await editLocalPatient(session.userId, body.id, {
+        firstName: body.firstName,
+        lastName: body.lastName,
+        patronymic: body.patronymic,
+        birthDate: body.birthDate,
+      });
+      if (!edited) return error('Bunday bemor topilmadi (klinikadagi bemor ismini bu yerdan o‘zgartirib bo‘lmaydi)', 404);
+      if ('error' in edited) return error(edited.error);
+      return json({ ok: true, patient: edited });
+    }
+
+    if (body.action === 'remove') {
+      if (!body.id) return error('id kerak');
+      const removed = await removeLocalPatient(session.userId, body.id);
+      if (!removed) return error('Bunday bemor topilmadi (klinikadagi bemorni o‘chirib bo‘lmaydi)', 404);
+      return json({ ok: true });
     }
 
     return error('action noto‘g‘ri');

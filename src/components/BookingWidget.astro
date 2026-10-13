@@ -58,6 +58,7 @@ const widgetData = JSON.stringify({ departments, doctors });
   import { ageOnDate, fitsAgeGroup, ageRejected, ageChip, ageUnfit, toAgeGroup } from '../lib/age';
   import { site } from '../data/site';
   import { parsePhone, formatPhone } from '../lib/phone';
+  import { setupCodeFlow } from '../lib/login-flow';
 
   const { departments, doctors } = JSON.parse(document.getElementById('widgetData').textContent);
   const lang = getLang();
@@ -485,7 +486,7 @@ const widgetData = JSON.stringify({ departments, doctors });
       ? esc(formatBirthDate(p.birthDate, lang))
       : esc(tr('booking.birthDate.missingFor'));
     return `<button class="who-item${p.id === state.patientId ? ' on' : ''}${fits ? '' : ' unfit'}" data-pick="${esc(p.id)}">
-      <span class="who-nm">${esc(p.name)}</span>
+      <span class="who-nm">${esc(p.name)}${fits ? `<span class="who-go">${esc(tr('booking.who.pick'))}</span>` : ''}</span>
       <small class="who-bd${p.birthDate ? '' : ' none'}">${note}${
         fits ? '' : ` · ${esc(ageUnfit(docAgeGroup(), lang))}`
       }</small>
@@ -517,20 +518,21 @@ const widgetData = JSON.stringify({ departments, doctors });
     if (!data) return patientsError === 'network' ? renderPatientsFailed() : renderLogin();
 
     wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.whoFor'))}</div>
+      <p class="who-hint">${esc(tr('booking.who.hint'))}</p>
       <div class="who-list" id="whoList"><p class="slot-empty">${esc(tr('common.loading'))}</p></div>
-      <button class="btn btn-ghost w-full" id="whoNew" type="button">+ Boshqa odam</button>
+      <button class="btn btn-ghost w-full" id="whoNew" type="button">${esc(tr('booking.who.new'))}</button>
       <div class="who-form" id="whoForm" hidden>
         <input id="w-last" type="text" placeholder="${esc(tr('booking.field.lastName'))}" autocomplete="family-name" />
         <input id="w-first" type="text" placeholder="${esc(tr('booking.field.firstName'))}" autocomplete="given-name" />
         <input id="w-mid" type="text" placeholder="${esc(tr('booking.field.patronymic'))}" />
         <div class="fld-label">${esc(tr('booking.birthDate'))} *</div>
         ${birthDateSelectsHtml('new', lang)}
-        <button class="btn w-full" id="whoSave" type="button">Saqlash va davom etish</button>
+        <button class="btn w-full" id="whoSave" type="button">${esc(tr('booking.who.saveContinue'))}</button>
       </div>
       <div class="who-form" id="whoBirth" hidden>
         <div class="fld-label" id="whoBirthLabel"></div>
         ${birthDateSelectsHtml('fix', lang)}
-        <button class="btn w-full" id="whoBirthSave" type="button">Saqlash va davom etish</button>
+        <button class="btn w-full" id="whoBirthSave" type="button">${esc(tr('booking.who.saveContinue'))}</button>
       </div>
       <label class="consent">
         <input type="checkbox" id="privacyOk"${state.privacyAccepted ? ' checked' : ''} />
@@ -624,7 +626,7 @@ const widgetData = JSON.stringify({ departments, doctors });
 
     if (!data.patients.length) {
       wBody.querySelector('#whoList').innerHTML =
-        '<p class="slot-empty">Klinikada yozuvingiz topilmadi — ism-familiyangizni kiriting.</p>';
+        `<p class="slot-empty">${esc(tr('booking.who.notFound'))}</p>`;
       newBtn.hidden = true;
       form.hidden = false;
     } else {
@@ -659,7 +661,7 @@ const widgetData = JSON.stringify({ departments, doctors });
       // Yoshi to'g'ri kelmasa — bemorni bekorga qo'shib o'tirmaymiz.
       if (!fitsDoctor({ birthDate })) return setMsg(ageRejected(docAgeGroup(), lang), 'error');
 
-      setMsg('Saqlanmoqda…');
+      setMsg(tr('booking.saving'));
       try {
         const res = await post({ action: 'add', firstName, lastName, patronymic, birthDate });
         const body = await res.json();
@@ -678,11 +680,11 @@ const widgetData = JSON.stringify({ departments, doctors });
       if (!privacyOk()) return;
       if (!fitsDoctor({ birthDate })) return setMsg(ageRejected(docAgeGroup(), lang), 'error');
 
-      setMsg('Saqlanmoqda…');
+      setMsg(tr('booking.saving'));
       try {
         const res = await post({ action: 'birthDate', id: fixing.id, birthDate });
         const body = await res.json();
-        if (!res.ok) return setMsg(body.error ?? 'Saqlab boʻlmadi.', 'error');
+        if (!res.ok) return setMsg(body.error ?? tr('booking.saveFailed'), 'error');
         // Ro'yxatdagi yozuv ham yangilanadi — orqaga qaytilsa sana turadi.
         const at = patients.patients.findIndex((p) => p.id === fixing.id);
         if (at !== -1) patients.patients[at] = body.patient;
@@ -715,14 +717,20 @@ const widgetData = JSON.stringify({ departments, doctors });
   function renderLogin() {
     wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.login.title'))}</div>
       <p class="login-lede">${esc(tr('booking.login.lede'))}</p>
-      <div class="login-steps">
-        <span>${esc(tr('booking.login.botStep'))}</span>
-        <a class="btn btn-sm tg" href="${BOT_URL}" target="_blank" rel="noopener">${esc(tr('booking.login.botBtn'))}</a>
-      </div>
-      <label class="fld-label" for="wPhone">${esc(tr('booking.login.phone'))}</label>
-      <input class="login-inp" id="wPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+998 90 123 45 67" />
-      <label class="fld-label" for="wCode">${esc(tr('booking.login.code'))}</label>
-      <input class="login-inp code" id="wCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" />
+      <ol class="login-steps">
+        <li>
+          <b>${esc(tr('signin.page.step1new'))}</b>
+          <a class="btn tg w-full" id="wGetCode" href="${BOT_URL}" target="_blank" rel="noopener"><span>${esc(tr('signin.page.getCode'))}</span></a>
+          <p class="hint" id="wGetStatus" role="status" aria-live="polite"></p>
+        </li>
+        <li id="wStepTwo" class="locked">
+          <b>${esc(tr('signin.page.enterCode'))}</b>
+          <label class="fld-label" for="wPhone">${esc(tr('booking.login.phone'))}</label>
+          <input class="login-inp" id="wPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+998 90 123 45 67" />
+          <label class="fld-label" for="wCode">${esc(tr('booking.login.code'))}</label>
+          <input class="login-inp code" id="wCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" />
+        </li>
+      </ol>
       <p class="book-msg" id="loginMsg" role="status" aria-live="polite"></p>
       <button class="btn w-full" id="wLogin" type="button">${esc(tr('booking.login.button'))}</button>
       <button class="back-link">${esc(tr('booking.back.time'))}</button>`;
@@ -740,6 +748,24 @@ const widgetData = JSON.stringify({ departments, doctors });
       msg.textContent = text;
       msg.className = `book-msg${kind ? ` ${kind}` : ''}`;
     };
+
+    // "Kodni olish": bot ochiladi, kod kelgach telefon o'zi to'ladi.
+    const getCode = wBody.querySelector('#wGetCode');
+    setupCodeFlow({
+      button: getCode,
+      label: getCode.querySelector('span'),
+      status: wBody.querySelector('#wGetStatus'),
+      phone,
+      codeFocus: () => code.focus(),
+      onStart: () => wBody.querySelector('#wStepTwo').classList.remove('locked'),
+      text: {
+        opening: tr('signin.page.opening'),
+        waiting: tr('signin.page.waiting'),
+        codeSent: tr('signin.page.codeSent'),
+        expired: tr('signin.page.expired'),
+        getCodeAgain: tr('signin.page.getCodeAgain'),
+      },
+    });
 
     code.addEventListener('input', () => {
       code.value = code.value.replace(/\D/g, '').slice(0, 6);
@@ -1209,9 +1235,29 @@ const widgetData = JSON.stringify({ departments, doctors });
     cursor: default;
   }
 
-  @media (max-width: 420px) {
-    .step-pill .lbl {
+  /*
+    Yorliqlar sig'masa pill'dan chiqib ketmasin (5-qadam "Tasdiqlash" ekran
+    chetidan oshib ketardi): pill torayadi, yorliq qirqiladi. Tor ekranda
+    faqat joriy qadamning yorliqi ko'rinadi, qolganlari — raqam.
+  */
+  .step-pill {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .step-pill .lbl {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 560px) {
+    .step-pill:not(.on) .lbl {
       display: none;
+    }
+
+    .step-pill.on {
+      flex: 2.6;
     }
   }
 
@@ -1699,6 +1745,27 @@ const widgetData = JSON.stringify({ departments, doctors });
     cursor: pointer;
   }
 
+  .widget :global(.who-hint) {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .widget :global(.who-nm) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .widget :global(.who-go) {
+    flex: none;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--rose);
+  }
+
   .widget :global(.who-item:hover) {
     border-color: var(--leaf);
   }
@@ -1793,13 +1860,13 @@ const widgetData = JSON.stringify({ departments, doctors });
   }
 
   .widget :global(.login-steps) {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin-bottom: 16px;
+    list-style: none;
+    counter-reset: lstep;
+    margin: 0 0 16px;
     padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
     border: 1px solid var(--card-brd);
     background: var(--chip-bg);
     border-radius: 16px;
@@ -1807,10 +1874,59 @@ const widgetData = JSON.stringify({ departments, doctors });
     line-height: 1.5;
   }
 
+  .widget :global(.login-steps li) {
+    counter-increment: lstep;
+    position: relative;
+    padding-left: 36px;
+  }
+
+  .widget :global(.login-steps li::before) {
+    content: counter(lstep);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: var(--rose-soft);
+    color: var(--rose);
+    font-weight: 800;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .widget :global(.login-steps li > b) {
+    display: block;
+    font-weight: 650;
+    margin-bottom: 8px;
+  }
+
   .widget :global(.login-steps .tg) {
-    flex: none;
     background: var(--color-tg, #2aabee);
     box-shadow: none;
+  }
+
+  .widget :global(.login-steps .hint) {
+    margin-top: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+    min-height: 16px;
+  }
+
+  .widget :global(.login-steps .hint.ok) {
+    color: var(--leaf);
+  }
+
+  .widget :global(.login-steps .hint.error) {
+    color: var(--rose);
+  }
+
+  /* "Kodni olish" bosilguncha 2-qadam xira — tartib ko'rinib tursin */
+  .widget :global(.login-steps li.locked > *) {
+    opacity: 0.5;
   }
 
   .widget :global(.login-inp) {

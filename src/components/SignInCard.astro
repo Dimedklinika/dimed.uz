@@ -1,6 +1,6 @@
 ---
 import { site } from '../data/site';
-import { t, type Lang } from '../data/i18n';
+import { t, type Lang, type MessageKey } from '../data/i18n';
 
 /*
   Kirish talab qilinadigan sahifalarning mehmon holati.
@@ -16,13 +16,15 @@ import { t, type Lang } from '../data/i18n';
 */
 interface Props {
   what: string;
+  /** `what` ning i18n kaliti: berilsa matn brauzerda tanlangan tilga almashadi. */
+  whatKey?: MessageKey;
   next: string;
   lang?: Lang;
   id?: string;
   hidden?: boolean;
 }
 
-const { what, next, lang = 'uz', id = 'guest', hidden = false } = Astro.props;
+const { what, whatKey, next, lang = 'uz', id = 'guest', hidden = false } = Astro.props;
 const tr = (key: Parameters<typeof t>[0]) => t(key, lang);
 ---
 
@@ -36,18 +38,18 @@ const tr = (key: Parameters<typeof t>[0]) => t(key, lang);
       </svg>
     </div>
 
-    <h2>{tr('signin.title')}</h2>
-    <p class="signin-what" data-signin-what>{what}</p>
-    <p class="signin-lede">{tr('signin.lede')}</p>
+    <h2 data-t="signin.title">{tr('signin.title')}</h2>
+    <p class="signin-what" data-signin-what data-t={whatKey}>{what}</p>
+    <p class="signin-lede" data-t="signin.lede">{tr('signin.lede')}</p>
 
     <ol class="signin-steps">
-      <li>{tr('signin.step1')}</li>
-      <li>{tr('signin.step2')}</li>
+      <li data-t="signin.step1">{tr('signin.step1')}</li>
+      <li data-t="signin.step2">{tr('signin.step2')}</li>
     </ol>
 
     <div class="signin-btns">
-      <a class="btn" href={`/kirish?next=${next}`}>{tr('signin.button')}</a>
-      <a class="btn btn-ghost tg" href={site.telegramBot} target="_blank" rel="noopener">{tr('signin.bot')}</a>
+      <a class="btn" href={`/kirish?next=${next}`} data-t="signin.button">{tr('signin.button')}</a>
+      <a class="btn btn-ghost tg" href={site.telegramBot} target="_blank" rel="noopener" data-t="signin.bot">{tr('signin.bot')}</a>
     </div>
 
     <p class="signin-note" data-signin-note hidden></p>

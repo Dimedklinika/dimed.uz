@@ -1,7 +1,7 @@
 /**
  * Brauzerdagi til tanlovi (uz / ru / en).
  *
- * Tartib: `?lang=` parametri → manzildagi til prefiksi (`/ru/`, `/en/`)
+ * Tartib: sahifaning o'z tili (`data-page-lang`) → `?lang=` parametri → manzildagi til prefiksi (`/ru/`, `/en/`)
  * → localStorage (`dimed_lang`) → sahifa `<html lang>` → uz.
  *
  * Manzil har doim ustun: ommaviy sahifalar uch tilda alohida yig'iladi,
@@ -21,6 +21,17 @@ function fromPath(): Lang | null {
 
 export function getLang(): Lang {
   try {
+    /*
+      Ommaviy sahifa (Base `lang` bergan) o'z tilini `data-page-lang` da
+      e'lon qiladi. U har doim ustun: aks holda `/` (o'zbekcha) sahifada
+      localStorage'dagi eski "ru" tufayli bron vidjeti va menyu ruscha
+      chiqib, sahifa uch tilda aralash ko'rinardi.
+    */
+    const pageLang = document.documentElement.dataset.pageLang;
+    if (isLang(pageLang)) {
+      localStorage.setItem(KEY, pageLang);
+      return pageLang;
+    }
     const fromUrl = new URLSearchParams(location.search).get('lang');
     if (isLang(fromUrl)) {
       localStorage.setItem(KEY, fromUrl);
