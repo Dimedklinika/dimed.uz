@@ -95,7 +95,6 @@ export const messages = {
     ru: 'Введите 6-значный код из бота',
     en: 'Enter the 6-digit code from the bot',
   },
-  'signin.page.digit': { uz: '{n}-raqam', ru: '{n}-я цифра', en: 'digit {n}' },
   'signin.page.help': {
     uz: 'Kod kelmadimi? Botga /start yuboring — yangi kod olasiz.',
     ru: 'Код не пришёл? Отправьте боту /start — придёт новый.',

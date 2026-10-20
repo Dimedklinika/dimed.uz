@@ -130,14 +130,15 @@ const fmtDateTime = (iso: string): string => {
 /**
  * Ko'rsatkichlar soniga qarab zichlik.
  *
- * A4 (portrait) da sarlavha, bemor jadvali, izoh va footer'dan keyin
+ * A4 (portrait) da sarlavha, bemor jadvali, izoh+QR va footer'dan keyin
  * jadvalga ~500 pt qoladi. Shrift va katak oralig'ini shu bo'yicha
- * kichraytiramiz: 24 tagacha ko'rsatkich bitta betga sig'sin.
+ * kichraytiramiz: 36 tagacha ko'rsatkich QR bilan birga bitta betga sig'sin.
+ * `pad` — qatorning yagona vertikal oralig'i (jadvalning o'z paddingi 0).
  */
 function density(n: number): { fs: number; pad: number } {
-  if (n <= 12) return { fs: 9.5, pad: 5 };
-  if (n <= 18) return { fs: 8.5, pad: 3.6 };
-  if (n <= 24) return { fs: 7.6, pad: 2.6 };
+  if (n <= 12) return { fs: 9.5, pad: 7 };
+  if (n <= 18) return { fs: 8.5, pad: 5.6 };
+  if (n <= 24) return { fs: 7.6, pad: 4.6 };
   return { fs: 6.8, pad: 1.8 };
 }
 
@@ -308,6 +309,12 @@ export function buildResultDocDefinition(result: PdfResult, lang: Lang): PdfDocD
       hLineWidth: (i: number) => (i === 1 ? 1.2 : 0.6),
       vLineWidth: () => 0,
       hLineColor: () => C.line,
+      /*
+        pdfmake har katakka standart 2+2 pt qo'shardi — `pad` ustiga. 31
+        qatorda bu ~125 pt bo'lib, QR kod 2-betga tushib qolardi.
+      */
+      paddingTop: () => 0,
+      paddingBottom: () => 0,
     },
     margin: [0, 0, 0, 12] as [number, number, number, number],
   };
@@ -335,10 +342,12 @@ export function buildResultDocDefinition(result: PdfResult, lang: Lang): PdfDocD
   /*
     Hujjat haqiqiyligi: QR kod /tekshirish sahifasiga olib boradi — u
     hujjat tizimda borligi va bekor qilinmaganini aytadi (natija
-    qiymatlarisiz). Izohning yonida turadi.
+    qiymatlarisiz). Izohning yonida turadi va undan ajralmaydi: joy
+    yetmasa ikkalasi birga keyingi betga o'tadi (QR yolg'iz qolmaydi).
   */
   const closing = result.verifyUrl
     ? {
+        unbreakable: true,
         columns: [
           { width: '*', stack: [disclaimer] },
           {
