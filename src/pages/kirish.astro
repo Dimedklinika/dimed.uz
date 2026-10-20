@@ -45,19 +45,23 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
               aria-label={uz('signin.page.phoneLabel')}
             />
           </label>
-          <div class="otp-row" id="otpRow">
-            {
-              [1, 2, 3, 4, 5, 6].map((n) => (
-                <input
-                  class="otp"
-                  type="text"
-                  inputmode="numeric"
-                  maxlength="1"
-                  aria-label={t('signin.page.digit', 'uz', { n })}
-                />
-              ))
-            }
-          </div>
+          <!--
+            Kod — bitta maydon (telefon kabi). 6 ta alohida katak Android'da
+            buzilardi: klaviatura buferdan qo'yganda `paste` hodisasi kelmaydi,
+            matn birinchi katakka tushadi va maxlength="1" uni bitta raqamga
+            kesib qo'yardi. maxlength yo'q: " 482 917" kabi bo'sh joyli matn
+            ham kesilmasin — raqamlarni JS ajratib oladi.
+          -->
+          <label class="fld-inline">
+            <span class="fld-lbl" data-t="booking.login.code">{uz('booking.login.code')}</span>
+            <input
+              id="code"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              placeholder="000000"
+            />
+          </label>
         </li>
       </ol>
 
@@ -126,7 +130,7 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
   applyPageLang(lang);
 
   const phoneInput = document.getElementById('phone') as HTMLInputElement;
-  const otpInputs = [...document.querySelectorAll<HTMLInputElement>('#otpRow .otp')];
+  const codeInput = document.getElementById('code') as HTMLInputElement;
   const submit = document.getElementById('submit') as HTMLButtonElement;
   const msg = document.getElementById('msg') as HTMLParagraphElement;
 
@@ -135,28 +139,23 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
     msg.className = `msg${kind ? ` ${kind}` : ''}`;
   };
 
-  otpInputs.forEach((input, i) => {
-    input.addEventListener('input', () => {
-      input.value = input.value.replace(/\D/g, '').slice(0, 1);
-      if (input.value && i < otpInputs.length - 1) otpInputs[i + 1]?.focus();
-    });
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace' && !input.value && i > 0) otpInputs[i - 1]?.focus();
-      if (e.key === 'Enter') submit.click();
-    });
-    input.addEventListener('paste', (e) => {
-      e.preventDefault();
-      const digits = (e.clipboardData?.getData('text') ?? '').replace(/\D/g, '').slice(0, 6);
-      digits.split('').forEach((c, j) => {
-        const box = otpInputs[j];
-        if (box) box.value = c;
-      });
-      if (digits.length === 6) submit.click();
-    });
+  /*
+    Faqat raqamlar, ko'pi bilan 6 ta. Kod bir yo'la to'liq tushsa (bufer,
+    klaviatura taklifi) — darhol kiramiz; qo'lda yozilganda tugma bosiladi.
+  */
+  let codeLen = 0;
+  codeInput.addEventListener('input', () => {
+    codeInput.value = codeInput.value.replace(/\D/g, '').slice(0, 6);
+    const pastedWhole = codeLen < 5 && codeInput.value.length === 6;
+    codeLen = codeInput.value.length;
+    if (pastedWhole) submit.click();
+  });
+  codeInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submit.click();
   });
 
   phoneInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') otpInputs[0]?.focus();
+    if (e.key === 'Enter') codeInput.focus();
   });
 
   /*
@@ -171,7 +170,7 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
 
   submit.addEventListener('click', async () => {
     const checked = parsePhone(phoneInput.value);
-    const code = otpInputs.map((i) => i.value).join('');
+    const code = codeInput.value;
 
     if (!checked.ok) {
       setMsg(checked.error, 'error');
@@ -181,7 +180,7 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
     const phone = checked.value;
     if (code.length !== 6) {
       setMsg(tr('booking.login.codeRequired'), 'error');
-      otpInputs.find((i) => !i.value)?.focus();
+      codeInput.focus();
       return;
     }
 
@@ -203,8 +202,9 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
       }
 
       setMsg(data.error ?? tr('booking.login.failed'), 'error');
-      otpInputs.forEach((i) => (i.value = ''));
-      otpInputs[0]?.focus();
+      codeInput.value = '';
+      codeLen = 0;
+      codeInput.focus();
     } catch {
       setMsg(tr('common.error.network'), 'error');
     } finally {
@@ -226,7 +226,7 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
     label: getCode.querySelector('span'),
     status: document.getElementById('getStatus') as HTMLParagraphElement,
     phone: phoneInput,
-    codeFocus: () => otpInputs[0]?.focus(),
+    codeFocus: () => codeInput.focus(),
     onStart: () => stepTwo.classList.remove('locked'),
     text: {
       opening: tr('signin.page.opening'),
@@ -399,10 +399,8 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
 
     if (/^\d{12}$/.test(autoPhone) && /^\d{6}$/.test(autoCode)) {
       phoneInput.value = formatPhone(`+${autoPhone}`);
-      autoCode.split('').forEach((digit, i) => {
-        const box = otpInputs[i];
-        if (box) box.value = digit;
-      });
+      codeInput.value = autoCode;
+      codeLen = autoCode.length;
       setMsg(tr('signin.page.autoLogin'));
       submit.click();
     }
@@ -488,7 +486,7 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
   }
 
   /* 2-qadam "Kodni olish" bosilguncha xira — tartib ko'rinib tursin */
-  .steps li.locked :is(.fld-inline, .otp-row, b) {
+  .steps li.locked :is(.fld-inline, b) {
     opacity: 0.5;
     transition: opacity 0.2s;
   }
@@ -515,6 +513,10 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
     margin-bottom: 12px;
   }
 
+  .fld-inline:last-child {
+    margin-bottom: 0;
+  }
+
   .fld-lbl {
     display: block;
     font-size: 12.5px;
@@ -522,7 +524,8 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
     margin-bottom: 6px;
   }
 
-  #phone {
+  #phone,
+  #code {
     width: 100%;
     border: 1.5px solid var(--line);
     background: var(--chip-bg);
@@ -534,31 +537,17 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
     font-family: inherit;
   }
 
-  #phone:focus {
-    border-color: var(--rose);
-    outline: none;
+  #code {
+    letter-spacing: 0.4em;
+    font-weight: 650;
   }
 
-  .otp-row {
-    display: flex;
-    gap: 8px;
+  #code::placeholder {
+    font-weight: 400;
   }
 
-  .otp {
-    width: 100%;
-    max-width: 52px;
-    height: 56px;
-    text-align: center;
-    font-family: var(--font-display);
-    font-weight: 800;
-    font-size: 22px;
-    border: 1.5px solid var(--line);
-    border-radius: 12px;
-    background: var(--chip-bg);
-    color: var(--ink);
-  }
-
-  .otp:focus {
+  #phone:focus,
+  #code:focus {
     border-color: var(--rose);
     outline: none;
   }
