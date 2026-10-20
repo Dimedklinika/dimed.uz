@@ -728,7 +728,7 @@ const widgetData = JSON.stringify({ departments, doctors });
           <label class="fld-label" for="wPhone">${esc(tr('booking.login.phone'))}</label>
           <input class="login-inp" id="wPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+998 90 123 45 67" />
           <label class="fld-label" for="wCode">${esc(tr('booking.login.code'))}</label>
-          <input class="login-inp code" id="wCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" />
+          <input class="login-inp code" id="wCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" />
         </li>
       </ol>
       <p class="book-msg" id="loginMsg" role="status" aria-live="polite"></p>
@@ -767,6 +767,7 @@ const widgetData = JSON.stringify({ departments, doctors });
       },
     });
 
+    // maxlength yo'q: bo'sh joyli qo'yilgan kod (" 482 917") kesilib qolmasin.
     code.addEventListener('input', () => {
       code.value = code.value.replace(/\D/g, '').slice(0, 6);
     });

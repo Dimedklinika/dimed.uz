@@ -227,13 +227,19 @@ await test('telefon raqami har xil yozilsa ham qabul qilinadi', async () => {
 
   for (const raw of ['11 111 11 11', '+998 11 111 1111', '111111111']) {
     await page.fill('#phone', raw);
-    const boxes = await page.$$('.otp-row input');
-    for (let i = 0; i < 6; i++) await boxes[i].fill('1');
+    await page.type('#code', '111111'); // qo'lda yozish — tugma bilan yuboriladi
     sentPhone = null;
     await page.click('#submit');
     await page.waitForTimeout(200);
     assert.equal(sentPhone, '+998111111111', `${raw} noto‘g‘ri yuborildi`);
   }
+
+  // Kod bitta maydonda: buferdan bir yo'la tushgan matn (Android) bo'sh
+  // joy bilan bo'lsa ham to'liq olinadi va o'zi yuboriladi.
+  sentPhone = null;
+  await page.fill('#code', ' 482 917 ');
+  await page.waitForTimeout(200);
+  assert.equal(sentPhone, '+998111111111', 'qo‘yilgan kod o‘zi yuborilishi kerak');
 
   await page.fill('#phone', '123');
   sentPhone = null;

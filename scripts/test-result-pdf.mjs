@@ -14,6 +14,7 @@
  * Ishlatish: node --experimental-strip-types scripts/test-result-pdf.mjs
  */
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -217,6 +218,57 @@ test('QR kod tekshirish havolasi bilan; havola bo\'lmasa QR yo\'q', () => {
   assert.ok(!allText(buildResultDocDefinition(cbc, 'uz')).includes('[QR'));
   assert.ok(!allText(buildResultDocDefinition({ ...cbc, verifyUrl: null }, 'uz')).includes('[QR'));
   assert.ok(allText(buildResultDocDefinition({ ...cbc, verifyUrl: url }, 'ru')).includes('QR'), 'izoh ruscha ham');
+});
+
+/*
+  Haqiqiy chizish (pdfmake, node): ta'rif emas, betlarga qanday tushishi.
+  31 ko'rsatkichli siydik tahlilida QR kod yolg'iz 2-betga tushib qolgan edi.
+*/
+const require = createRequire(import.meta.url);
+const PdfPrinter = require('pdfmake');
+const vfs = require('pdfmake/build/vfs_fonts.js');
+const font = (name) => Buffer.from(vfs[name], 'base64');
+const printer = new PdfPrinter({
+  Roboto: {
+    normal: font('Roboto-Regular.ttf'),
+    bold: font('Roboto-Medium.ttf'),
+    italics: font('Roboto-Italic.ttf'),
+    bolditalics: font('Roboto-MediumItalic.ttf'),
+  },
+});
+
+/** Betlar soni va matn qaysi betda (1 dan) — `_pdfMakePages` dan. */
+function layOut(result) {
+  const pages = printer.createPdfKitDocument(buildResultDocDefinition(result, 'uz'))._pdfMakePages;
+  const pageOf = (needle) =>
+    pages.findIndex((p) =>
+      p.items.some((it) => it.type === 'line' && it.item.inlines.map((i) => i.text).join('').includes(needle)),
+    ) + 1;
+  return { pages: pages.length, pageOf };
+}
+
+const withItems = (n) => ({
+  ...cbc,
+  verifyUrl: 'https://dimed.uz/tekshirish?v=eyJpZCI6IjEyMzQ1Njc4OTAifQ.c2lnbmF0dXJlLWZvci1xci10ZXN0',
+  items: Array.from({ length: n }, (_, i) => ({
+    title: `Ko'rsatkich ${i + 1}`, value: String(4 + i), unit: 'g/L', reference: '3.9 — 5.6',
+    refLow: 3.9, refHigh: 5.6, status: 'normal',
+  })),
+});
+
+test('36 tagacha ko\'rsatkich QR kod bilan birga bitta betga sig\'adi', () => {
+  for (const n of [6, 12, 18, 24, 31, 36]) {
+    const doc = layOut(withItems(n));
+    assert.equal(doc.pages, 1, `${n} ta ko'rsatkich: ${doc.pages} bet`);
+    assert.equal(doc.pageOf('QR'), 1, `${n} ta: QR 1-betda`);
+  }
+});
+
+test('joy yetmasa QR izohdan ajralmaydi (birga keyingi betga o\'tadi)', () => {
+  for (const n of [40, 50, 70]) {
+    const doc = layOut(withItems(n));
+    assert.equal(doc.pageOf('QR'), doc.pageOf('Muhim eslatma'), `${n} ta: QR va izoh bir betda`);
+  }
 });
 
 test('birlik faqat sonli qiymatga yoziladi ("manfiy g/L" chiqmaydi)', () => {
