@@ -1,0 +1,729 @@
+---
+import type { Lang } from '../data/i18n';
+import { vt } from '../data/visiting-i18n';
+import { langHref } from '../data/home';
+import { site } from '../data/site';
+
+interface Props {
+  lang: Lang;
+  /**
+   * `home` — bosh sahifadagi bo'lim: 3 tagacha karta va «Barchasi»
+   * havolasi; shifokor bo'lmasa bo'lim umuman ko'rinmaydi.
+   * `page` — alohida sahifa: hammasi, bo'sh bo'lsa izoh.
+   */
+  variant?: 'home' | 'page';
+  /** Bosh sahifada nechta karta. */
+  limit?: number;
+}
+const { lang, variant = 'home', limit = 3 } = Astro.props;
+const isHome = variant === 'home';
+const Tag = isHome ? 'h2' : 'h1';
+---
+
+<section
+  class:list={['wrap', 'visiting', { 'visiting-page': !isHome }]}
+  id="tashrif"
+  data-visiting
+  data-variant={variant}
+  data-limit={limit}
+  data-phone={site.phone}
+  data-phone-href={site.phoneHref}
+  hidden={isHome}
+>
+  <div class="sec-head">
+    <div class="eyebrow">{vt('v.eyebrow', lang)}</div>
+    <Tag>{vt('v.title', lang)}</Tag>
+    <p>{vt('v.text', lang)}</p>
+  </div>
+  <div class="v-cards" data-v-cards aria-live="polite">
+    {
+      !isHome &&
+        [0, 1].map(() => (
+          <div class="v-card v-skel glass" aria-hidden="true">
+            <div class="v-top">
+              <span class="v-ph" />
+              <div class="v-id">
+                <i />
+                <i class="w" />
+              </div>
+            </div>
+            <i class="w" />
+            <i />
+            <i class="w" />
+          </div>
+        ))
+    }
+  </div>
+  {
+    isHome && (
+      <div class="v-foot" data-v-foot hidden>
+        <a class="btn btn-ghost btn-sm" href={langHref('/tashrif-shifokorlar', lang)}>
+          {vt('v.all', lang)} →
+        </a>
+      </div>
+    )
+  }
+</section>
+
+<dialog class="v-dialog" data-v-dialog aria-labelledby="vDialogTitle">
+  <div class="v-dbar">
+    <h2 id="vDialogTitle">{vt('f.title', lang)}</h2>
+    <button class="v-x" type="button" data-v-x aria-label={vt('f.close', lang)}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"
+        ><path d="M6 6l12 12M18 6L6 18"></path></svg
+      >
+    </button>
+  </div>
+  <div class="v-dbody" data-v-body></div>
+</dialog>
+
+<script>
+  import { initVisiting } from '../lib/visiting-ui';
+  initVisiting();
+</script>
+
+<style is:global>
+  /* ---------- kartochkalar ---------- */
+  .visiting {
+    padding: var(--section-pad) 0;
+  }
+
+  .visiting[hidden] {
+    display: none;
+  }
+
+  .visiting-page {
+    padding-top: var(--sp-5);
+    min-height: 60vh;
+  }
+
+  .visiting-page .sec-head h1 {
+    font-size: clamp(28px, 3.6vw, 42px);
+    font-weight: 750;
+  }
+
+  .v-cards {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sp-3);
+  }
+
+  @media (max-width: 980px) {
+    .v-cards {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 620px) {
+    .v-cards {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .v-card {
+    border-radius: 18px;
+    padding: var(--card-pad);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    min-width: 0;
+  }
+
+  .v-top {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+  }
+
+  .v-ph {
+    width: 76px;
+    height: 76px;
+    flex-shrink: 0;
+    border-radius: 20px;
+    object-fit: cover;
+    background: var(--rose-soft);
+  }
+
+  .v-initials {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 24px;
+    color: var(--rose);
+  }
+
+  .v-id {
+    min-width: 0;
+  }
+
+  .v-spec {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--leaf);
+    background: var(--leaf-soft);
+    border-radius: 999px;
+    padding: 3px 10px;
+    margin-bottom: 6px;
+  }
+
+  .v-card h3 {
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .v-bio {
+    font-size: 14px;
+    color: var(--muted);
+    white-space: pre-line;
+  }
+
+  .v-bio.clamp {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .v-facts {
+    margin: 0;
+    display: grid;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
+    border-radius: 14px;
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+  }
+
+  .v-facts > div {
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: var(--sp-2);
+    align-items: baseline;
+  }
+
+  .v-facts dt {
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .v-facts dd {
+    margin: 0;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    min-width: 0;
+  }
+
+  .v-facts dd b {
+    display: block;
+    font-weight: 650;
+  }
+
+  .v-next {
+    display: block;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .v-next.none {
+    color: var(--warn);
+  }
+
+  .v-nw {
+    white-space: nowrap;
+  }
+
+  .v-dates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .v-date {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--ink);
+    background: var(--card-solid);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+
+  .v-price {
+    color: var(--rose);
+    font-size: 16px;
+  }
+
+  .v-book {
+    margin-top: auto;
+    width: 100%;
+  }
+
+  .v-foot {
+    margin-top: var(--sp-4);
+  }
+
+  .v-foot[hidden] {
+    display: none;
+  }
+
+  .v-empty {
+    grid-column: 1 / -1;
+    border-radius: 18px;
+    padding: var(--card-pad);
+    color: var(--muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    align-items: center;
+  }
+
+  .v-empty a,
+  .v-dialog a {
+    color: var(--rose);
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  /* Yuklanayotganda — kulrang chiziqlar */
+  .v-skel i {
+    display: block;
+    height: 12px;
+    border-radius: 6px;
+    background: var(--busy);
+    width: 80%;
+  }
+
+  .v-skel i.w {
+    width: 55%;
+  }
+
+  .v-skel .v-id {
+    flex: 1;
+    display: grid;
+    gap: 8px;
+  }
+
+  .v-skel .v-ph,
+  .v-skel i {
+    animation: v-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes v-pulse {
+    50% {
+      opacity: 0.45;
+    }
+  }
+
+  /* ---------- yozilish oynasi ---------- */
+  .v-dialog {
+    width: min(520px, calc(100vw - 32px));
+    max-height: min(92vh, 860px);
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--card-brd);
+    border-radius: 22px;
+    background: var(--card-solid);
+    color: var(--ink);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .v-dialog[open] {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .v-dialog::backdrop {
+    background: var(--scrim);
+    backdrop-filter: blur(3px);
+  }
+
+  .v-dbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .v-dbar h2 {
+    font-size: 18px;
+    font-weight: 750;
+  }
+
+  .v-x {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .v-x svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .v-x:hover {
+    border-color: var(--rose);
+    color: var(--rose);
+  }
+
+  .v-dbody {
+    padding: var(--sp-4);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+
+  @media (max-width: 600px) {
+    /* Telefonda — pastdan chiqadigan varaq: qo'l bilan yetish oson. */
+    .v-dialog {
+      width: 100vw;
+      max-width: 100vw;
+      max-height: 94vh;
+      margin: auto 0 0;
+      border-radius: 22px 22px 0 0;
+    }
+
+    .v-dbar,
+    .v-dbody {
+      padding-left: var(--sp-3);
+      padding-right: var(--sp-3);
+    }
+
+    .v-dbody {
+      padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom));
+    }
+  }
+
+  .v-dhead {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+  }
+
+  .v-dph {
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: var(--rose-soft);
+  }
+
+  .v-dph.v-initials {
+    font-size: 18px;
+  }
+
+  .v-dhead .v-spec {
+    margin-bottom: 2px;
+  }
+
+  .v-dname {
+    font-weight: 700;
+    font-size: 15.5px;
+    line-height: 1.25;
+  }
+
+  .v-dprice {
+    margin-left: auto;
+    font-weight: 750;
+    color: var(--rose);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .v-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+
+  .v-form fieldset {
+    border: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+  }
+
+  .v-form fieldset[hidden] {
+    display: none;
+  }
+
+  .v-form legend,
+  .v-fld > span {
+    font-size: 12.5px;
+    font-weight: 650;
+    color: var(--muted);
+    margin-bottom: var(--sp-2);
+    padding: 0;
+  }
+
+  .v-days {
+    display: flex;
+    gap: var(--sp-2);
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+  }
+
+  .v-day {
+    flex: none;
+    min-width: 62px;
+    border: 1px solid var(--line);
+    background: var(--chip-bg);
+    border-radius: 13px;
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    line-height: 1.3;
+  }
+
+  .v-day b {
+    font-size: 18px;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .v-day:hover:not(:disabled) {
+    border-color: var(--rose);
+  }
+
+  .v-day.on {
+    background: var(--rose);
+    border-color: var(--rose);
+    color: rgb(255 255 255 / 0.85);
+  }
+
+  .v-day.on b {
+    color: #fff;
+  }
+
+  .v-day:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .v-slots {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: var(--sp-2);
+  }
+
+  .v-slot {
+    min-height: 44px;
+    border: 1px solid var(--line);
+    background: var(--chip-bg);
+    border-radius: 11px;
+    font-weight: 650;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .v-slot:hover {
+    border-color: var(--rose);
+  }
+
+  .v-slot.on {
+    background: var(--rose);
+    border-color: var(--rose);
+    color: #fff;
+  }
+
+  .v-day:focus-visible,
+  .v-slot:focus-visible,
+  .v-x:focus-visible {
+    outline: 2px solid var(--rose);
+    outline-offset: 2px;
+  }
+
+  .v-fld {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .v-fld input {
+    font: inherit;
+    font-size: 16px; /* iOS: 16px dan kichik bo'lsa sahifa kattalashib ketadi */
+    min-height: 48px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1.5px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+  }
+
+  .v-fld input:focus {
+    outline: none;
+    border-color: var(--rose);
+    box-shadow: 0 0 0 3px var(--rose-soft);
+  }
+
+  /* Botlar uchun yashirin maydon */
+  .v-hp {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+  }
+
+  .v-msg {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--rose);
+    min-height: 0;
+  }
+
+  .v-msg:empty {
+    display: none;
+  }
+
+  .v-wide {
+    width: 100%;
+  }
+
+  .v-note,
+  .v-muted {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .v-note {
+    text-align: center;
+  }
+
+  .v-h {
+    font-size: 18px;
+    font-weight: 750;
+  }
+
+  .v-sum {
+    margin: 0;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .v-sum > div {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: var(--sp-2);
+    padding: 10px var(--sp-3);
+    border-bottom: 1px solid var(--line);
+    font-size: 14px;
+  }
+
+  .v-sum > div:last-child {
+    border-bottom: 0;
+  }
+
+  .v-sum dt {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .v-sum dd {
+    margin: 0;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .v-sum .total {
+    background: var(--rose-soft);
+  }
+
+  .v-sum .total dd {
+    color: var(--rose);
+    font-size: 16px;
+    font-weight: 750;
+  }
+
+  .v-pay {
+    display: flex;
+    gap: var(--sp-3);
+    align-items: flex-start;
+    padding: var(--sp-3);
+    border-radius: 14px;
+    background: var(--warn-bg);
+    color: var(--ink);
+    text-align: left;
+  }
+
+  .v-pay svg {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    color: var(--warn);
+  }
+
+  .v-pay b {
+    display: block;
+    font-size: 14.5px;
+  }
+
+  .v-pay span {
+    display: block;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+
+  .v-actions {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: var(--sp-2);
+  }
+
+  .v-done {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    text-align: center;
+    align-items: stretch;
+  }
+
+  .v-badge {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: var(--ok-bg);
+    color: var(--ok);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+  }
+
+  .v-badge svg {
+    width: 30px;
+    height: 30px;
+  }
+
+  .v-done-when {
+    font-size: 15px;
+  }
+</style>

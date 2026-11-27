@@ -1,0 +1,24 @@
+---
+import Base from '../../layouts/Base.astro';
+import VisitingDoctors from '../../components/VisitingDoctors.astro';
+import { LANGS, type Lang } from '../../data/i18n';
+import { vt } from '../../data/visiting-i18n';
+
+/*
+  «Tashrif buyuruvchi shifokorlar» sahifasi — uch tilda:
+  `/tashrif-shifokorlar`, `/ru/tashrif-shifokorlar`, `/en/tashrif-shifokorlar`.
+
+  Sarlavha va matn serverda yoziladi (Google uchun), kartochkalar esa
+  bazadan — admin panelda o'zgartirilgan zahoti ko'rinadi, deploy kerak emas.
+*/
+export function getStaticPaths() {
+  return LANGS.map((code) => ({ params: { lang: code === 'uz' ? undefined : code }, props: { lang: code } }));
+}
+
+const { lang } = Astro.props as { lang: Lang };
+---
+
+<Base lang={lang} title={vt('v.page.title', lang)} description={vt('v.page.description', lang)}>
+  <link rel="preload" href="/api/site-content" as="fetch" crossorigin="anonymous" slot="head" />
+  <VisitingDoctors lang={lang} variant="page" />
+</Base>

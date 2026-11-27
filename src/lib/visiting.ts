@@ -115,11 +115,11 @@ export function visitDates(
   return out;
 }
 
-/** Narxni "150 000" ko'rinishida (bo'shliq — ingichka, sinmaydigan). */
+/** Narxni "150 000" ko'rinishida (bo'shliq sinmaydi — raqam ikki qatorga bo'linmasin). */
 export const formatSum = (n: number): string =>
   Math.round(n)
     .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    .replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
 
 /** Bemor ismi: 2–80 belgi, kamida bitta harf, teg va havola yo'q. */
 export function checkPatientName(raw: unknown): { ok: true; value: string } | { ok: false } {

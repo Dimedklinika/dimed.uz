@@ -267,6 +267,7 @@ const copy = {
 
   'nav.depts': { uz: 'Boʻlimlar', ru: 'Отделения', en: 'Departments' },
   'nav.doctors': { uz: 'Shifokorlar', ru: 'Врачи', en: 'Doctors' },
+  'nav.visiting': { uz: 'Tashrif shifokorlari', ru: 'Приглашённые врачи', en: 'Visiting doctors' },
   'nav.how': { uz: 'Qanday ishlaydi', ru: 'Как это работает', en: 'How it works' },
   'nav.analyses': { uz: 'Tahlillar', ru: 'Анализы', en: 'Analyses' },
   'nav.contact': { uz: 'Kontakt', ru: 'Контакты', en: 'Contact' },

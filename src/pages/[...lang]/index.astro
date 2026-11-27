@@ -2,6 +2,7 @@
 import Base from '../../layouts/Base.astro';
 import BookingWidget from '../../components/BookingWidget.astro';
 import ClinicSchema from '../../components/ClinicSchema.astro';
+import VisitingDoctors from '../../components/VisitingDoctors.astro';
 import DeptIcon from '../../components/DeptIcon.astro';
 import { departments, deptName, deptText } from '../../data/departments';
 import { ageChip } from '../../lib/age';
@@ -32,6 +33,8 @@ const featuredAnalyses = featured
 
 <Base lang={lang} title={h('meta.title', lang)} description={h('meta.description', lang)}>
   <ClinicSchema lang={lang} slot="head" />
+  <!-- Tashrif shifokorlari va almashtirilgan rasmlar — sahifa bilan parallel so'raladi -->
+  <link rel="preload" href="/api/site-content" as="fetch" crossorigin="anonymous" slot="head" />
   <header class="hero wrap" id="navbat">
     <div class="hero-grid">
       <div>
@@ -130,7 +133,7 @@ const featuredAnalyses = featured
         activeDoctors.map((d) => (
           <div class="doc-card glass rv" data-doc-card={d.id}>
             <div class="ph">
-              <img src={d.photo} alt={d.name} width="64" height="64" loading="lazy" />
+              <img src={d.photo} data-media-slot={`doctor-${d.id}`} alt={d.name} width="64" height="64" loading="lazy" />
               <div>
                 <h3>{d.name}</h3>
                 <div class="jb">{jobText(d, lang)}</div>
@@ -161,6 +164,8 @@ const featuredAnalyses = featured
       }
     </div>
   </section>
+
+  <VisitingDoctors lang={lang} />
 
   <section class="wrap" id="qanday">
     <div class="sec-head rv">
@@ -249,6 +254,7 @@ const featuredAnalyses = featured
       <figure class="shot big rv">
         <img
           src="/images/klinika-bino.webp"
+          data-media-slot="gallery-building"
           alt={h('gallery.building', lang)}
           width="1200"
           height="900"
@@ -260,6 +266,7 @@ const featuredAnalyses = featured
       <figure class="shot rv">
         <img
           src="/images/klinika-xona.webp"
+          data-media-slot="gallery-room"
           alt={h('gallery.room', lang)}
           width="1200"
           height="901"
@@ -271,6 +278,7 @@ const featuredAnalyses = featured
       <figure class="shot rv">
         <img
           src="/images/klinika-laboratoriya.webp"
+          data-media-slot="gallery-lab"
           alt={h('gallery.lab', lang)}
           width="1200"
           height="558"
@@ -386,7 +394,10 @@ const featuredAnalyses = featured
 <script>
   // Tahlil narxlari bazadan (admin panel) yangilanadi (F2).
   import { applyLivePrices } from '../../lib/live-prices';
+  import { applyMediaOverrides } from '../../lib/site-content';
   applyLivePrices();
+  // Admin panelda almashtirilgan rasmlar (galereya, shifokorlar) — /admin → Rasmlar.
+  void applyMediaOverrides();
 </script>
 
 <style>
