@@ -38,7 +38,7 @@ Netlify → **Site configuration → Environment variables → Add a variable**:
 
 | Nom | Qiymat |
 | --- | --- |
-| `ADMIN_PASSWORD` | Panel paroli: kamida 8 belgi, uzun va tasodifiy (masalan 4 ta so'z + raqam) |
+| `ADMIN_PASSWORD` | Panel paroli: kamida 12 belgi, uzun va tasodifiy (masalan 4 ta so‘z + raqam) |
 
 Boshqa yangi kalit kerak emas: Netlify Blobs va kesh tozalash Netlify
 ichida o'zi ishlaydi. Mavjud `SESSION_SECRET` va `DIMED_AWS_*` kerak
@@ -95,7 +95,7 @@ endokrinologni kiriting (pastda batafsil).
 ## Admin paneldan foydalanish
 
 Manzil: **`dimed.uz/admin`**. Sessiya 12 soat; «Chiqish» tugmasi bor.
-Parolni 15 daqiqada 10 martadan ko'p xato kiritib bo'lmaydi.
+Parolni bitta qurilmadan 15 daqiqada 5 martadan ko'p xato kiritib bo'lmaydi; hamma joydan jami soatiga 100 ta xato bo'lsa, kirish soat oxirigacha yopiladi (ochiq sessiyalar ishlayveradi, log-botga xabar keladi).
 
 ### Tashrif shifokorlari
 
@@ -161,7 +161,7 @@ Parolni 15 daqiqada 10 martadan ko'p xato kiritib bo'lmaydi.
 
 | Belgi | Sabab va yechim |
 | --- | --- |
-| `/admin` da «Panel hali sozlanmagan» | `ADMIN_PASSWORD` yo'q yoki 8 belgidan qisqa → Netlify'da qo'shing, **Trigger deploy** |
+| `/admin` da «Panel hali sozlanmagan» | `ADMIN_PASSWORD` yoʻq yoki 12 belgidan qisqa → Netlify'da qo'shing, **Trigger deploy** |
 | Bosh sahifada bo'lim ko'rinmaydi | Saytda ko'rinadigan tashrif shifokori yo'q (yoki hammasi yashirilgan) |
 | Karta bor, «Yozilish» o'chiq | Yaqin 60 kunda kelish kuni yo'q → kunlarni belgilang |
 | Panelda «Saqlashda xatolik» | Jadvallar yaratilmagan (2-qadam) yoki AWS huquqi yangi jadvallarga yetmaydi |

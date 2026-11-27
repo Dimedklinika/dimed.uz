@@ -18,8 +18,11 @@ import { error } from './http.ts';
  */
 const COOKIE = 'dimed_admin';
 export const ADMIN_MAX_AGE_SECONDS = 12 * 60 * 60;
-/** Juda qisqa parol bilan panel ochilmaydi. */
-export const MIN_PASSWORD_LENGTH = 8;
+/**
+ * Juda qisqa parol bilan panel ochilmaydi. 12 belgi: urinishlar cheklangan
+ * bo'lsa ham "dimed2026" kabi taxmin qilinadigan parol o'tmasin.
+ */
+export const MIN_PASSWORD_LENGTH = 12;
 
 const sha256 = (s: string): Buffer => createHash('sha256').update(s).digest();
 

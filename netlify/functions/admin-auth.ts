@@ -8,7 +8,8 @@ import {
   sameOrigin,
   MIN_PASSWORD_LENGTH,
 } from './lib/admin-auth.ts';
-import { hitLimit, clientIp } from './lib/rate-limit.ts';
+import { clientIp } from './lib/rate-limit.ts';
+import { checkLoginAllowed, clearIpFailures, recordLoginFailure } from './lib/login-guard.ts';
 import { logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 
@@ -19,10 +20,10 @@ import { json, error } from './lib/http.ts';
  *   POST   /api/admin-auth {password}  — kirish, HttpOnly cookie (12 soat)
  *   DELETE /api/admin-auth             — chiqish
  *
- * Parolni taxmin qilishga qarshi: bitta IP dan 15 daqiqada 10 ta urinish.
+ * Parolni taxmin qilishga qarshi (lib/login-guard.ts): bitta IP dan 15 daqiqada
+ * 5 ta xato, hamma IP dan soatiga 100 ta xato — keyin blok; hisoblagich
+ * ishlamasa kirish rad etiladi.
  */
-const MAX_ATTEMPTS = 10;
-const WINDOW_SECONDS = 15 * 60;
 const noStore = { 'cache-control': 'private, no-store' };
 
 export default async (request: Request, _context: Context): Promise<Response> => {
@@ -46,9 +47,18 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       );
     }
 
-    const rate = await hitLimit(`admin-kirish#${clientIp(request)}`, MAX_ATTEMPTS, WINDOW_SECONDS);
-    if (!rate.ok) {
-      return error(`Juda ko‘p urinish. ${Math.ceil(rate.retryAfter / 60)} daqiqadan so‘ng qayta urinib ko‘ring.`, 429);
+    const ip = clientIp(request);
+    const guard = await checkLoginAllowed(ip);
+    if (!guard.ok) {
+      if (guard.reason === 'unavailable') {
+        return error('Kirishni hozir tekshirib bo‘lmadi. Birozdan so‘ng urinib ko‘ring.', 503);
+      }
+      const minutes = Math.max(1, Math.ceil(guard.retryAfter / 60));
+      return json(
+        { error: `Juda ko‘p noto‘g‘ri urinish. ${minutes} daqiqadan so‘ng qayta urinib ko‘ring.` },
+        429,
+        { ...noStore, 'retry-after': String(guard.retryAfter) },
+      );
     }
 
     let password: unknown;
@@ -57,8 +67,12 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     } catch {
       return error('So‘rov noto‘g‘ri');
     }
-    if (!checkPassword(password)) return error('Parol noto‘g‘ri', 401);
+    if (!checkPassword(password)) {
+      await recordLoginFailure(ip);
+      return error('Parol noto‘g‘ri', 401);
+    }
 
+    await clearIpFailures(ip);
     return json({ ok: true }, 200, { ...noStore, 'set-cookie': createAdminCookie() });
   } catch (err) {
     await logToAdmin('admin-auth', err);

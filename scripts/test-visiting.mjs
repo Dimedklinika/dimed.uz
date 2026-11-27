@@ -247,13 +247,66 @@ await test('parol sozlanmagan bo‘lsa panel yopiq (503)', async () => {
   process.env.ADMIN_PASSWORD = 'juda-maxfiy-parol';
 });
 
-await test('parolni taxmin qilish cheklanadi (429)', async () => {
-  const fixedIp = { headers: { 'x-nf-client-connection-ip': '192.168.9.9' } };
-  let last;
-  for (let i = 0; i < 11; i++) {
-    last = await adminAuth(new Request(BASE + '/api/admin-auth', { ...post({ password: 'xato' }), headers: { ...post({}).headers, ...fixedIp.headers } }), ctx);
+/** Bitta IP dan kirish urinishi. */
+const loginFrom = (addr, password) =>
+  adminAuth(
+    new Request(BASE + '/api/admin-auth', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-nf-client-connection-ip': addr },
+      body: JSON.stringify({ password }),
+    }),
+    ctx,
+  );
+
+await test('parolni taxmin qilish: 5 ta xatodan keyin IP bloklanadi, to‘g‘ri parol ham o‘tmaydi', async () => {
+  const statuses = [];
+  for (let i = 0; i < 5; i++) statuses.push((await loginFrom('192.168.9.9', 'xato')).status);
+  assert.deepEqual(statuses, [401, 401, 401, 401, 401]);
+  const blocked = await loginFrom('192.168.9.9', 'juda-maxfiy-parol');
+  assert.equal(blocked.status, 429);
+  assert.ok(Number(blocked.headers.get('retry-after')) > 0);
+  // Boshqa IP ga ta'sir qilmaydi.
+  assert.equal((await loginFrom('192.168.9.10', 'juda-maxfiy-parol')).status, 200);
+});
+
+await test('to‘g‘ri kirish limitni yemaydi va shu IP xatolarini tozalaydi', async () => {
+  for (let i = 0; i < 4; i++) assert.equal((await loginFrom('192.168.7.7', 'xato')).status, 401);
+  assert.equal((await loginFrom('192.168.7.7', 'juda-maxfiy-parol')).status, 200);
+  for (let i = 0; i < 4; i++) assert.equal((await loginFrom('192.168.7.7', 'xato')).status, 401);
+});
+
+await test('hamma IP dan soatiga 100 ta xato — kirish butunlay yopiladi', async () => {
+  const { GLOBAL_WINDOW_SECONDS, GLOBAL_MAX_FAILS } = await lib('login-guard.ts');
+  const start = Math.floor(Date.now() / 1000 / GLOBAL_WINDOW_SECONDS) * GLOBAL_WINDOW_SECONDS;
+  const key = `admin-fail#all#${start}`;
+  const before = tableOf('test_rate_limits').get(key);
+  seed('test_rate_limits', key, { bucket: key, hits: GLOBAL_MAX_FAILS, expires_at: start + GLOBAL_WINDOW_SECONDS });
+  assert.equal((await loginFrom('10.20.30.40', 'juda-maxfiy-parol')).status, 429);
+  // Ochiq sessiya ishlayveradi.
+  assert.equal((await call(adminVisiting, '/api/admin-visiting', withCookie(cookie))).status, 200);
+  if (before) seed('test_rate_limits', key, before);
+  else tableOf('test_rate_limits').delete(key);
+});
+
+await test('hisoblagich ishlamasa kirish rad etiladi (fail-closed)', async () => {
+  const { db } = await lib('db.ts');
+  const original = db.send;
+  db.send = async () => {
+    throw new Error('DynamoDB ishlamayapti');
+  };
+  try {
+    const res = await loginFrom('10.99.99.99', 'juda-maxfiy-parol');
+    assert.equal(res.status, 503);
+    assert.equal(res.headers.get('set-cookie'), null);
+  } finally {
+    db.send = original;
   }
-  assert.equal(last.status, 429);
+});
+
+await test('parol 12 belgidan qisqa bo‘lsa panel yopiq', async () => {
+  process.env.ADMIN_PASSWORD = '11-belgi-pw';
+  assert.equal((await loginFrom('10.1.1.1', '11-belgi-pw')).status, 503);
+  process.env.ADMIN_PASSWORD = 'juda-maxfiy-parol';
 });
 
 console.log('\nTashrif shifokorlari (admin):');
