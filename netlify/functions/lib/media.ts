@@ -49,15 +49,33 @@ const memoryStore: Store = {
   },
 };
 
+/**
+ * Netlify funksiyasi ichida ombor sozlamasi muhitdan o'zi olinadi.
+ * Netlify'dan tashqarida (rasmlarni ko'chirish skripti) — sayt ID si va
+ * shaxsiy token bilan: `NETLIFY_SITE_ID`, `NETLIFY_AUTH_TOKEN`.
+ */
+function openStore(consistency?: 'strong'): ReturnType<typeof getStore> {
+  const siteID = process.env.NETLIFY_SITE_ID?.trim();
+  const token = process.env.NETLIFY_AUTH_TOKEN?.trim();
+  if (siteID && token) return getStore({ name: MEDIA_STORE, siteID, token });
+  return getStore({ name: MEDIA_STORE, ...(consistency ? { consistency } : {}) });
+}
+
 function blobStore(): Store {
-  // `strong` — yangi yuklangan rasm darhol o'qilsin (aks holda bir daqiqagacha 404).
-  const store = getStore({ name: MEDIA_STORE, consistency: 'strong' });
+  const store = openStore();
+  // `strong` — yangi yuklangan rasm darhol o'qilsin (oddiy rejimda bir daqiqagacha 404).
+  const strong = openStore('strong');
   return {
     async put(key, data, meta) {
       await store.set(key, data.slice().buffer as ArrayBuffer, { metadata: meta });
     },
     async get(key) {
-      const found = await store.getWithMetadata(key, { type: 'arrayBuffer' });
+      const read = (s: ReturnType<typeof getStore>) => s.getWithMetadata(key, { type: 'arrayBuffer' });
+      // Muhit strong rejimni bermasa (eski runtime) — oddiy o'qishga qaytamiz.
+      const found = await read(strong).catch((err: unknown) => {
+        if ((err as { name?: string })?.name === 'BlobsConsistencyError') return read(store);
+        throw err;
+      });
       if (!found) return null;
       return { data: found.data, meta: found.metadata as unknown as MediaMeta };
     },

@@ -16,7 +16,16 @@ let pending: Promise<SiteContent | null> | null = null;
 export function loadSiteContent(force = false): Promise<SiteContent | null> {
   if (!pending || force) {
     pending = fetch('/api/site-content', { headers: { accept: 'application/json' } })
-      .then((r) => (r.ok ? (r.json() as Promise<SiteContent>) : null))
+      .then((r) => (r.ok ? (r.json() as Promise<Partial<SiteContent>>) : null))
+      // Kutilmagan shakl (eski kesh, proksi sahifasi) sahifani buzmasin.
+      .then((c) =>
+        c && typeof c === 'object'
+          ? {
+              visiting: Array.isArray(c.visiting) ? c.visiting : [],
+              media: c.media && typeof c.media === 'object' ? c.media : {},
+            }
+          : null,
+      )
       .catch(() => null);
   }
   return pending;

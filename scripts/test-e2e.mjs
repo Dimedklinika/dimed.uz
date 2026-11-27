@@ -644,7 +644,7 @@ await test('sahifalar ekran chetiga yopishmaydi va yonga surilmaydi', async () =
   // tushirib qo'yardi; ustunlar ham vidjet tufayli ekrandan chiqib ketardi.
   const ctx = await browser.newContext({ viewport: { width: 360, height: 800 }, isMobile: true });
   await mockApi(ctx, { signedIn: false });
-  for (const path of ['/', '/ru/', '/en/', '/kirish', '/tahlillar', '/maxfiylik']) {
+  for (const path of ['/', '/ru/', '/en/', '/kirish', '/tahlillar', '/maxfiylik', '/tashrif-shifokorlar']) {
     const page = await ctx.newPage();
     await page.goto(base + path, { waitUntil: 'networkidle' });
     const m = await page.evaluate(() => ({
@@ -657,6 +657,146 @@ await test('sahifalar ekran chetiga yopishmaydi va yonga surilmaydi', async () =
     assert.ok(m.price.every((r) => r <= 360), `${path}: narx ustuni ekrandan tashqarida`);
     await page.close();
   }
+  await ctx.close();
+});
+
+console.log('\nTashrif buyuruvchi shifokorlar:');
+
+const visitingContent = (photo = '') => ({
+  visiting: [
+    {
+      id: 'v-aaaa1111', name: { uz: 'Karimov Jasur', ru: 'Каримов Жасур' },
+      specialty: { uz: 'Travmatolog', ru: 'Травматолог', en: 'Traumatologist' },
+      bio: { uz: 'Sport jarohatlari' }, photo, weekdays: [0, 1, 2, 3, 4, 5, 6], dates: [], skipDates: [],
+      shifts: [{ start: '09:00', end: '12:00' }], slotMinutes: 30, price: 150000,
+    },
+  ],
+  media: { 'gallery-building': { url: '/images/klinika-xona.webp', width: 1200, height: 901 } },
+});
+const visitDay = (offset) => {
+  const d = new Date(Date.now() + 5 * 3600e3 + offset * 86400e3);
+  return d.toISOString().slice(0, 10);
+};
+
+/** Tashrif API'lari: site-content, visiting-slots, visiting-book (qolgani mockApi da). */
+async function mockVisiting(ctx, { bookStatus = 200, bookBody = { ok: true, booking: {} } } = {}) {
+  const sent = [];
+  await ctx.route('**/api/site-content', (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(visitingContent()) }));
+  await ctx.route('**/api/visiting-slots**', (r) =>
+    r.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ days: [{ date: visitDay(1), slots: [] }, { date: visitDay(2), slots: ['09:00', '09:30', '11:30'] }] }),
+    }),
+  );
+  await ctx.route('**/api/visiting-book', (r) => {
+    sent.push(JSON.parse(r.request().postData() ?? '{}'));
+    return r.fulfill({ status: bookStatus, contentType: 'application/json', body: JSON.stringify(bookBody) });
+  });
+  return sent;
+}
+
+for (const vp of [
+  { name: 'mobil', width: 375, height: 800, isMobile: true },
+  { name: 'desktop', width: 1280, height: 900, isMobile: false },
+]) {
+  await test(`${vp.name}: tashrif shifokoriga yozilish — tasdiqlashda «To‘lov klinikada» va summa`, async () => {
+    const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, isMobile: vp.isMobile });
+    await mockApi(ctx, { signedIn: false });
+    const sent = await mockVisiting(ctx);
+    const page = await ctx.newPage();
+    const jsErrors = [];
+    page.on('pageerror', (e) => jsErrors.push(e.message));
+    await page.goto(`${base}/tashrif-shifokorlar`, { waitUntil: 'networkidle' });
+    await page.click('[data-v-book="v-aaaa1111"]');
+    await page.waitForSelector('.v-slot');
+    // Band kun tanlab bo'lmaydi, bo'sh vaqti bor kun o'zi tanlanadi.
+    assert.equal(await page.isDisabled(`.v-day[data-day="${visitDay(1)}"]`), true);
+    await page.click('.v-form button[type=submit]');
+    assert.match(await page.textContent('.v-msg'), /vaqtni tanlang/i);
+    await page.click('.v-slot[data-time="09:30"]');
+    await page.fill('input[name=name]', 'Aliyev Vali');
+    await page.fill('input[name=phone]', '12345');
+    await page.click('.v-form button[type=submit]');
+    assert.match(await page.textContent('.v-msg'), /Telefon/);
+    await page.fill('input[name=phone]', '90 123 45 67');
+    await page.click('.v-form button[type=submit]');
+    const pay = await page.textContent('.v-pay');
+    assert.match(pay, /Toʻlov klinikada amalga oshiriladi/);
+    assert.match(pay, /150\s000 soʻm/);
+    assert.equal(sent.length, 0, 'tasdiqlashdan oldin so‘rov ketmasin');
+    await page.click('[data-v-confirm]');
+    await page.waitForSelector('.v-done');
+    assert.equal(sent.length, 1);
+    assert.deepEqual(
+      { doctor: sent[0].doctor, date: sent[0].date, time: sent[0].time, phone: sent[0].phone },
+      { doctor: 'v-aaaa1111', date: visitDay(2), time: '09:30', phone: '+998 90 123 45 67' },
+    );
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    assert.ok(overflow <= 0, `sahifa ${overflow}px yonga surilyapti`);
+    assert.deepEqual(jsErrors, []);
+    await ctx.close();
+  });
+}
+
+await test('vaqt band bo‘lib qolsa — xabar ruscha, forma yangi vaqtlar bilan qaytadi', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: false });
+  await mockVisiting(ctx, { bookStatus: 409, bookBody: { error: 'band', code: 'taken' } });
+  const page = await ctx.newPage();
+  await page.goto(`${base}/ru/tashrif-shifokorlar`, { waitUntil: 'networkidle' });
+  assert.match(await page.textContent('.v-spec'), /Травматолог/);
+  await page.click('.v-book');
+  await page.waitForSelector('.v-slot');
+  await page.click('.v-slot[data-time="09:00"]');
+  await page.fill('input[name=name]', 'Иванов Иван');
+  await page.fill('input[name=phone]', '+998 91 234 56 78');
+  await page.click('.v-form button[type=submit]');
+  assert.match(await page.textContent('.v-pay'), /Оплата производится в клинике/);
+  await page.click('[data-v-confirm]');
+  await page.waitForSelector('.v-form');
+  assert.match(await page.textContent('.v-msg'), /только что заняли/);
+  await ctx.close();
+});
+
+await test('bosh sahifada bo‘lim chiqadi va admin almashtirgan galereya rasmi qo‘yiladi', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: false });
+  await mockVisiting(ctx);
+  const page = await ctx.newPage();
+  await page.goto(`${base}/`, { waitUntil: 'networkidle' });
+  assert.equal(await page.isVisible('#tashrif'), true);
+  assert.equal(await page.locator('#tashrif .v-card').count(), 1);
+  assert.equal(await page.getAttribute('img[data-media-slot="gallery-building"]', 'src'), '/images/klinika-xona.webp');
+  await ctx.close();
+});
+
+await test('tashrif shifokori bo‘lmasa bosh sahifada bo‘lim ko‘rinmaydi', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: false });
+  await ctx.route('**/api/site-content', (r) => r.fulfill({ contentType: 'application/json', body: '{"visiting":[],"media":{}}' }));
+  const page = await ctx.newPage();
+  await page.goto(`${base}/`, { waitUntil: 'networkidle' });
+  assert.equal(await page.isVisible('#tashrif'), false);
+  await ctx.close();
+});
+
+await test('/admin: parolsiz panel ochilmaydi, noto‘g‘ri parol xabari', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 800 }, isMobile: true });
+  await ctx.route('**/api/admin-auth', (r) =>
+    r.request().method() === 'GET'
+      ? r.fulfill({ contentType: 'application/json', body: '{"ok":false,"configured":true}' })
+      : r.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"Parol noto‘g‘ri"}' }),
+  );
+  const page = await ctx.newPage();
+  await page.goto(`${base}/admin`, { waitUntil: 'networkidle' });
+  assert.equal(await page.isVisible('#loginView'), true);
+  assert.equal(await page.isVisible('#appView'), false);
+  await page.fill('#loginPass', 'xato');
+  await page.click('#loginBtn');
+  await page.waitForFunction(() => document.getElementById('loginMsg')?.textContent);
+  assert.match(await page.textContent('#loginMsg'), /noto‘g‘ri/);
+  const robots = await page.getAttribute('meta[name=robots]', 'content');
+  assert.match(robots, /noindex/);
   await ctx.close();
 });
 

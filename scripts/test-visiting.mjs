@@ -526,5 +526,32 @@ await test('shifokor o‘chiriladi (majburan) — yozuvlar qoladi, rasm o‘chad
   assert.match(body.bookings[0].doctorName, /Karimov Jasur/);
 });
 
+console.log('\nRasmlarni ko‘chirish skripti:');
+
+await test('--dry hech narsa yozmaydi', async () => {
+  const { migrateImages } = await import('./migrate-images.mjs');
+  const before = tableOf('test_site_media').size;
+  const r = await migrateImages({ dry: true, log: () => {} });
+  assert.equal(tableOf('test_site_media').size, before);
+  assert.ok(r.migrated >= 4);
+});
+
+await test('rasmlar ko‘chiriladi, admin almashtirgani bosib ketilmaydi, qayta ishga tushirish xavfsiz', async () => {
+  const { migrateImages } = await import('./migrate-images.mjs');
+  const bannerBefore = tableOf('test_site_media').get('banner');
+  const first = await migrateImages({ log: () => {} });
+  // banner — testda admin yuklagan, o'tkazib yuboriladi; qolganlari ko'chadi.
+  assert.equal(first.skipped, 1);
+  assert.equal(first.migrated, 4);
+  assert.equal(first.missing, 0);
+  assert.deepEqual(tableOf('test_site_media').get('banner'), bannerBefore);
+  const doc = tableOf('test_site_media').get('doctor-ashurov');
+  assert.match(doc.url, /^\/media\/u\/.+\.webp$/);
+  assert.equal((await call(media, doc.url)).status, 200);
+  const again = await migrateImages({ log: () => {} });
+  assert.equal(again.migrated, 0);
+  assert.equal(again.skipped, 5);
+});
+
 stopFakeDynamo();
 console.log(`\n${passed} ta tashrif/admin tekshiruvi o'tdi.`);
