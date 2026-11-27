@@ -1,9 +1,10 @@
 # dimed.uz
 
 Dimed klinikasi (Chinoz) sayti: onlayn navbat, Telegram orqali kirish,
-shaxsiy kabinet va laboratoriya natijalari.
+shaxsiy kabinet, laboratoriya natijalari, tashrif buyuruvchi shifokorlarga
+yozilish va parol bilan kiriladigan `/admin` paneli.
 
-**Stack:** Astro + Tailwind CSS + TypeScript · Netlify Functions · Amazon DynamoDB + S3 · Telegram Bot API
+**Stack:** Astro + Tailwind CSS + TypeScript · Netlify Functions · Netlify Blobs (rasmlar) · Amazon DynamoDB + S3 · Telegram Bot API
 
 ## Ishga tushirish
 
@@ -21,6 +22,8 @@ npm run dev             # http://localhost:4321
 | `npm run typecheck` | Astro va funksiyalar tiplarini tekshirish |
 | `npm test` | Barcha tekshiruvlar (mantiq + API) |
 | `npm run create-tables` | DynamoDB jadvallarini yaratish (bir marta) |
+| `npm run create-visiting-tables` | Faqat yangi jadvallar: `visiting_doctors`, `visiting_bookings`, `site_media` |
+| `npm run migrate-images` | Repodagi rasmlarni Netlify Blobs'ga ko'chirish (bir marta; `--dry`, `--force`) |
 | `npm run seed-doctors` | Shifokorlarni bazaga yozish |
 | `npm run seed-prices` | Tahlil narxlarini `prices` jadvaliga yozish (bir marta; `--dry`, `--force`) |
 | `npm run migrate-slot-minutes` | Bazadagi shifokorlarni 60 daqiqalik slotga o'tkazish (bir marta) |
@@ -85,6 +88,18 @@ legacy/           eski Jekyll sayti (arxiv, deploy qilinmaydi)
 | `GET,POST /api/admin-prices` | Admin: tahlil va qabul narxlari |
 | `GET,POST /api/admin-ratings` | Admin: baholar ro'yxati, yashirish |
 | `POST /api/payment-webhook` | Payme webhook — faqat `PAYMENT_ENABLED=1` bo'lsa (hozir o'chiq) |
+| `GET /api/site-content` | Tashrif shifokorlari kartalari + admin almashtirgan rasmlar (CDN kesh) |
+| `GET /api/visiting-slots` | Tashrif shifokorining yaqin kunlari va **faqat bo'sh** vaqtlari |
+| `POST /api/visiting-book` | Tashrif shifokoriga yozilish (kirishsiz, bepul, to'lov klinikada) |
+| `GET /media/*` | Netlify Blobs'dagi rasmlar; `/media/slot/banner` — og:image |
+| `GET,POST,DELETE /api/admin-auth` | `/admin` ga parol bilan kirish / chiqish |
+| `GET,POST,PATCH,DELETE /api/admin-visiting` | Admin: tashrif shifokorlari |
+| `GET,POST /api/admin-visiting-bookings` | Admin: yozilganlar, holat |
+| `POST /api/admin-upload` | Admin: rasm yuklash (siqish, WebP) |
+| `GET,POST,DELETE /api/admin-media` | Admin: banner, galereya, shifokor rasmlari |
+
+Tashrif shifokorlari va `/admin` paneli haqida batafsil —
+[`docs/TASHRIF-SHIFOKORLAR.md`](docs/TASHRIF-SHIFOKORLAR.md).
 
 ### Rejalashtirilgan funksiyalar (cron)
 
@@ -179,6 +194,7 @@ tizimini ulaydigan dasturchiga (kassa ochilgach).
 
 | Fayl | Kim uchun |
 | --- | --- |
+| [`docs/TASHRIF-SHIFOKORLAR.md`](docs/TASHRIF-SHIFOKORLAR.md) | Klinika egasi — `/admin` paneli, tashrif shifokorlari, rasmlar; ishga tushirish |
 | [`docs/LOYIHA-XARITASI.md`](docs/LOYIHA-XARITASI.md) | **Yangi dasturchi yoki AI — nima qayerda: oqimlar, jadvallar, endpointlar, tuzoqlar** |
 | [`docs/OCHILISH-REJASI.md`](docs/OCHILISH-REJASI.md) | Klinika egasi — ochilishdan oldingi to'rt qadam (deploy, 1C, shifokorlar, sozlamalar) |
 | [`docs/QOLGAN-ISHLAR.md`](docs/QOLGAN-ISHLAR.md) | Klinika egasi — hozir nima qilish kerak (joriy ro'yxat) |
