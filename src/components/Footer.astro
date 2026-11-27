@@ -2,7 +2,7 @@
 import Logo from './Logo.astro';
 import { site } from '../data/site';
 import type { Lang } from '../data/i18n';
-import { h } from '../data/home';
+import { h, langHref } from '../data/home';
 
 interface Props {
   /** Ommaviy sahifada — o'sha sahifaning tili; kabinetda berilmaydi. */
@@ -28,6 +28,8 @@ const privacyHref = L === 'uz' ? '/maxfiylik' : `/maxfiylik?lang=${L}`;
       <a class="foot-link" href={site.mapsUrl} target="_blank" rel="noopener">
         {h('contact.address.value', L)}
       </a>
+      <span class="sep" aria-hidden="true">·</span>
+      <a class="foot-link" href={langHref('/tashrif-shifokorlar', L)} data-t="nav.visiting">{h('nav.visiting', L)}</a>
       <span class="sep" aria-hidden="true">·</span>
       <a class="foot-link" href={privacyHref} data-t="footer.privacy">{h('footer.privacy', L)}</a>
     </p>

@@ -59,6 +59,7 @@ const widgetData = JSON.stringify({ departments, doctors });
   import { site } from '../data/site';
   import { parsePhone, formatPhone } from '../lib/phone';
   import { setupCodeFlow } from '../lib/login-flow';
+  import { applyMediaOverrides } from '../lib/site-content';
 
   const { departments, doctors } = JSON.parse(document.getElementById('widgetData').textContent);
   const lang = getLang();
@@ -338,7 +339,7 @@ const widgetData = JSON.stringify({ departments, doctors });
         list
           .map(
             (d) => `<button class="doc-btn" data-id="${d.id}">
-              <img src="${d.photo}" alt="" width="42" height="42" loading="lazy">
+              <img src="${d.photo}" data-media-slot="doctor-${d.id}" alt="" width="42" height="42" loading="lazy">
               <span><span class="nm">${esc(d.name)}</span><br><span class="jb">${esc(jobText(d))}</span></span>
               <span class="tags">${
                 ageChip(toAgeGroup(d.ageGroup), lang)
@@ -361,6 +362,8 @@ const widgetData = JSON.stringify({ departments, doctors });
         }),
       );
       wBody.querySelector('.back-link').addEventListener('click', () => setStep(1));
+      // Admin panelda almashtirilgan shifokor rasmi (/admin → Rasmlar).
+      void applyMediaOverrides(wBody);
     } else if (state.step === 3) {
       renderDatesAndSlots();
     } else if (state.step === 4) {

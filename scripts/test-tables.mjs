@@ -14,7 +14,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { tables } from './tables.mjs';
+import { tables, createTableInput, provisionedTotal, FREE_TIER_LIMIT } from './tables.mjs';
 import { buildScript, loadDoctors, OUTPUT } from './gen-cloudshell-setup.mjs';
 
 let passed = 0;
@@ -26,7 +26,7 @@ const test = (name, fn) => {
 
 console.log('Jadval ta\'riflari:');
 
-test('14 ta jadval', () => assert.equal(tables.length, 14));
+test('17 ta jadval', () => assert.equal(tables.length, 17));
 
 test('har bir jadvalda nom, maydon va kalit bor', () => {
   for (const t of tables) {
@@ -92,6 +92,8 @@ test('kodda ishlatiladigan indekslar mavjud', () => {
   assert.ok(indexNames('appointments').includes('patient-index'));
   assert.ok(indexNames('appointments').includes('date-index'), 'cron eslatmalari shunga tayanadi');
   assert.ok(indexNames('visits').includes('date-index'), 'davomat cron\'i shunga tayanadi');
+  assert.ok(indexNames('visiting_bookings').includes('date-index'), 'admin yozilganlar ro\'yxati');
+  assert.ok(indexNames('visiting_bookings').includes('phone-index'), 'bitta raqam cheklovi');
 });
 
 test('bemor ma\'lumoti bor jadvallarda zaxira nusxa yoqiladi', () => {
@@ -103,12 +105,42 @@ test('bemor ma\'lumoti bor jadvallarda zaxira nusxa yoqiladi', () => {
   assert.deepEqual(bor.sort(), [...kutilgan].sort(), 'zaxirali jadvallar ro\'yxati');
 
   // Vaqtinchalik jadvallar zaxirasiz: ular TTL bilan o'zi o'chadi.
-  const vaqtinchalik = tables.filter((t) => !t.backup).map((t) => t.name);
+  // Bepul tarif (capacity) jadvallari ham zaxirasiz — PITR pullik.
+  const vaqtinchalik = tables.filter((t) => !t.backup && !t.capacity).map((t) => t.name);
   assert.deepEqual(vaqtinchalik.sort(), ['login_sessions', 'otp_codes', 'rate_limits']);
   assert.ok(
     vaqtinchalik.every((n) => tables.find((t) => t.name === n).ttlAttribute),
     'zaxirasiz jadvalda TTL bo\'lishi kerak',
   );
+});
+
+test('tashrif jadvallari bepul tarifda: PROVISIONED 1/1, GSI ham 1/1, PITR yo\'q', () => {
+  for (const name of ['visiting_doctors', 'visiting_bookings', 'site_media']) {
+    const t = tables.find((x) => x.name === name);
+    assert.equal(t.backup, undefined, `${name}: PITR yoqilmasin (pullik)`);
+    const input = createTableInput(t, 'dimed');
+    assert.equal(input.BillingMode, 'PROVISIONED', `${name}: on-demand emas`);
+    assert.deepEqual(input.ProvisionedThroughput, { ReadCapacityUnits: 1, WriteCapacityUnits: 1 });
+    for (const gsi of input.GlobalSecondaryIndexes ?? []) {
+      assert.deepEqual(gsi.ProvisionedThroughput, { ReadCapacityUnits: 1, WriteCapacityUnits: 1 }, `${name}/${gsi.IndexName}`);
+    }
+  }
+});
+
+test('provisioned jami Free Tier (25 RCU / 25 WCU) dan oshmaydi', () => {
+  const total = provisionedTotal(tables);
+  // visiting_doctors 1 + visiting_bookings 1 (+2 GSI) + site_media 1 = 5 / 5.
+  assert.deepEqual(total, { read: 5, write: 5 });
+  assert.ok(total.read <= FREE_TIER_LIMIT.read && total.write <= FREE_TIER_LIMIT.write);
+});
+
+test('eski jadvallar o\'zgarmagan: PAY_PER_REQUEST, sig\'im berilmaydi', () => {
+  for (const t of tables.filter((x) => !x.capacity)) {
+    const input = createTableInput(t, 'dimed');
+    assert.equal(input.BillingMode, 'PAY_PER_REQUEST', t.name);
+    assert.equal(input.ProvisionedThroughput, undefined, t.name);
+    for (const gsi of input.GlobalSecondaryIndexes ?? []) assert.equal(gsi.ProvisionedThroughput, undefined);
+  }
 });
 
 test('otp_codes da TTL yoqiladi', () => {

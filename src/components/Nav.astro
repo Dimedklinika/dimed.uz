@@ -17,6 +17,9 @@ const L: Lang = lang ?? 'uz';
 const links = [
   { href: `${langHref('/', L)}#bolimlar`, key: 'nav.depts', label: h('nav.depts', L) },
   { href: `${langHref('/', L)}#shifokorlar`, key: 'nav.doctors', label: h('nav.doctors', L) },
+  // Faqat mobil menyuda: keng ekranda bosh sahifadagi bo'lim va pastki qatordagi havola yetadi,
+  // 6-havola esa header'ni ikki qatorga sindirib yuborardi.
+  { href: langHref('/tashrif-shifokorlar', L), key: 'nav.visiting', label: h('nav.visiting', L), menuOnly: true },
   { href: `${langHref('/', L)}#qanday`, key: 'nav.how', label: h('nav.how', L) },
   { href: langHref('/tahlillar', L), key: 'nav.analyses', label: h('nav.analyses', L) },
   { href: `${langHref('/', L)}#kontakt`, key: 'nav.contact', label: h('nav.contact', L) },
@@ -44,7 +47,7 @@ const langLinks = lang ? LANGS.map((code) => ({ code, href: langHref(bare, code)
         <Logo height={26} label="Dimed logotipi" />
       </a>
       <div class="nav-links">
-        {links.map((l) => <a href={l.href} data-t={l.key}>{l.label}</a>)}
+        {links.filter((l) => !('menuOnly' in l)).map((l) => <a href={l.href} data-t={l.key}>{l.label}</a>)}
       </div>
       <div class="nav-cta">
         <!-- Kirgan foydalanuvchida JS bu tugmani ism/avatar bilan menyu tugmasiga almashtiradi (C1) -->

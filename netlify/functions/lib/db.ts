@@ -31,6 +31,9 @@ export const TABLES = {
   ratings: tableName('ratings'),
   rateLimits: tableName('rate_limits'),
   loginSessions: tableName('login_sessions'),
+  visitingDoctors: tableName('visiting_doctors'),
+  visitingBookings: tableName('visiting_bookings'),
+  siteMedia: tableName('site_media'),
 } as const;
 
 /**

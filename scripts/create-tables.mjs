@@ -3,6 +3,10 @@
  *
  * Ishlatish:
  *   AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... npm run create-tables
+ *
+ * Faqat ayrim jadvallar (mavjudlariga umuman murojaat qilinmaydi):
+ *   node scripts/create-tables.mjs --only=visiting_doctors,visiting_bookings,site_media
+ *   npm run create-visiting-tables   # yuqoridagining qisqasi
  */
 import {
   DynamoDBClient,
@@ -14,7 +18,7 @@ import {
 } from '@aws-sdk/client-dynamodb';
 
 import { clientConfig, printTarget, PREFIX as prefix } from './aws-env.mjs';
-import { tables } from './tables.mjs';
+import { tables, createTableInput } from './tables.mjs';
 
 const client = new DynamoDBClient(clientConfig());
 printTarget();
@@ -52,7 +56,22 @@ async function enableBackup(TableName) {
   }
 }
 
-for (const table of tables) {
+/*
+  `--only=a,b` — faqat shu jadvallar. Yangi bo'lim qo'shilganda jonli
+  bazadagi eski jadvallarga (hatto PITR tekshiruvi bilan ham) tegmaslik
+  uchun.
+*/
+const onlyArg = process.argv.find((a) => a.startsWith('--only='));
+const only = onlyArg ? new Set(onlyArg.slice('--only='.length).split(',').map((s) => s.trim()).filter(Boolean)) : null;
+if (only) {
+  const unknown = [...only].filter((n) => !tables.some((t) => t.name === n));
+  if (unknown.length) {
+    console.error(`Bunday jadval ta'rifi yo'q: ${unknown.join(', ')}`);
+    process.exit(1);
+  }
+}
+
+for (const table of only ? tables.filter((t) => only.has(t.name)) : tables) {
   const TableName = `${prefix}_${table.name}`;
 
   if (await exists(TableName)) {
@@ -61,16 +80,13 @@ for (const table of tables) {
     continue;
   }
 
-  await client.send(
-    new CreateTableCommand({
-      TableName,
-      AttributeDefinitions: table.attrs,
-      KeySchema: table.keys,
-      BillingMode: 'PAY_PER_REQUEST',
-      ...(table.indexes ? { GlobalSecondaryIndexes: table.indexes } : {}),
-    }),
+  await client.send(new CreateTableCommand(createTableInput(table, prefix)));
+  console.log(
+    table.capacity
+      ? `+ ${TableName} yaratildi — PROVISIONED ${table.capacity.read} RCU / ${table.capacity.write} WCU` +
+          `${table.indexes?.length ? ` (+ ${table.indexes.length} GSI, har biri ${table.capacity.read}/${table.capacity.write})` : ''}, PITR yo'q`
+      : `+ ${TableName} yaratildi`,
   );
-  console.log(`+ ${TableName} yaratildi`);
 
   if (table.ttlAttribute) {
     await waitUntilTableExists({ client, maxWaitTime: 120 }, { TableName });

@@ -14,6 +14,7 @@ import { langHref, HTML_LANG } from '../data/home';
 const pages: { path: string; priority: string; changefreq: string; langs: readonly Lang[] }[] = [
   { path: '/', priority: '1.0', changefreq: 'weekly', langs: LANGS },
   { path: '/tahlillar', priority: '0.8', changefreq: 'weekly', langs: LANGS },
+  { path: '/tashrif-shifokorlar', priority: '0.8', changefreq: 'weekly', langs: LANGS },
   { path: '/maxfiylik', priority: '0.3', changefreq: 'yearly', langs: ['uz'] },
 ];
 

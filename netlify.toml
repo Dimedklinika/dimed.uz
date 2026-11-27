@@ -5,6 +5,9 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
+  # sharp — native kutubxona (rasmni WebP ga siqish): esbuild uni to'play
+  # olmaydi, shuning uchun node_modules'dan o'zicha qo'shiladi.
+  external_node_modules = ["sharp"]
 
 [[redirects]]
   from = "/api/*"
@@ -26,8 +29,15 @@
     # `'unsafe-inline'` skriptlar uchun hozircha qoladi: Astro kichik
     # modulni sahifa ichiga joylaydi, hash esa har build'da o'zgaradi
     # va bu faylga qo'lda yozib bo'lmaydi. Qolgan yo'nalishlar
-    # (object, base, form, frame) qat'iy.
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    # (object, base, form, frame) qat'iy. `blob:` rasmlarda — admin
+    # panelda yuklanayotgan rasmni oldindan ko'rsatish uchun.
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
+# Admin paneli qidiruvga tushmasin (robots.txt dan tashqari, sarlavha bilan ham).
+[[headers]]
+  for = "/admin*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
 
 [[headers]]
   for = "/fonts/*"

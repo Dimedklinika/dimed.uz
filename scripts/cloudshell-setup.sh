@@ -565,10 +565,144 @@ JSON
 )"
 pitr "ratings"
 
+jadval "visiting_doctors" "$(cat <<JSON
+{
+  "TableName": "${PREFIX}_visiting_doctors",
+  "AttributeDefinitions": [
+    {
+      "AttributeName": "doctor_id",
+      "AttributeType": "S"
+    }
+  ],
+  "KeySchema": [
+    {
+      "AttributeName": "doctor_id",
+      "KeyType": "HASH"
+    }
+  ],
+  "BillingMode": "PROVISIONED",
+  "ProvisionedThroughput": {
+    "ReadCapacityUnits": 1,
+    "WriteCapacityUnits": 1
+  }
+}
+JSON
+)"
+
+jadval "visiting_bookings" "$(cat <<JSON
+{
+  "TableName": "${PREFIX}_visiting_bookings",
+  "AttributeDefinitions": [
+    {
+      "AttributeName": "doctor_day",
+      "AttributeType": "S"
+    },
+    {
+      "AttributeName": "time",
+      "AttributeType": "S"
+    },
+    {
+      "AttributeName": "date",
+      "AttributeType": "S"
+    },
+    {
+      "AttributeName": "starts_at",
+      "AttributeType": "S"
+    },
+    {
+      "AttributeName": "phone",
+      "AttributeType": "S"
+    }
+  ],
+  "KeySchema": [
+    {
+      "AttributeName": "doctor_day",
+      "KeyType": "HASH"
+    },
+    {
+      "AttributeName": "time",
+      "KeyType": "RANGE"
+    }
+  ],
+  "BillingMode": "PROVISIONED",
+  "ProvisionedThroughput": {
+    "ReadCapacityUnits": 1,
+    "WriteCapacityUnits": 1
+  },
+  "GlobalSecondaryIndexes": [
+    {
+      "IndexName": "date-index",
+      "KeySchema": [
+        {
+          "AttributeName": "date",
+          "KeyType": "HASH"
+        },
+        {
+          "AttributeName": "starts_at",
+          "KeyType": "RANGE"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "ALL"
+      },
+      "ProvisionedThroughput": {
+        "ReadCapacityUnits": 1,
+        "WriteCapacityUnits": 1
+      }
+    },
+    {
+      "IndexName": "phone-index",
+      "KeySchema": [
+        {
+          "AttributeName": "phone",
+          "KeyType": "HASH"
+        },
+        {
+          "AttributeName": "starts_at",
+          "KeyType": "RANGE"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "ALL"
+      },
+      "ProvisionedThroughput": {
+        "ReadCapacityUnits": 1,
+        "WriteCapacityUnits": 1
+      }
+    }
+  ]
+}
+JSON
+)"
+
+jadval "site_media" "$(cat <<JSON
+{
+  "TableName": "${PREFIX}_site_media",
+  "AttributeDefinitions": [
+    {
+      "AttributeName": "slot",
+      "AttributeType": "S"
+    }
+  ],
+  "KeySchema": [
+    {
+      "AttributeName": "slot",
+      "KeyType": "HASH"
+    }
+  ],
+  "BillingMode": "PROVISIONED",
+  "ProvisionedThroughput": {
+    "ReadCapacityUnits": 1,
+    "WriteCapacityUnits": 1
+  }
+}
+JSON
+)"
+
 # --- 2-qadam: jadvallar tayyor bo'lishini kutamiz ---
 echo
 echo "2-qadam: jadvallar tayyor bo'lishini kutamiz"
-for t in users otp_codes individuals doctors schedules appointments analysis_results visits payments lab_results prices rate_limits login_sessions ratings; do
+for t in users otp_codes individuals doctors schedules appointments analysis_results visits payments lab_results prices rate_limits login_sessions ratings visiting_doctors visiting_bookings site_media; do
   ddb wait table-exists --table-name "${PREFIX}_$t"
 done
 echo "  hammasi tayyor"

@@ -17,8 +17,56 @@ const ALL = { ProjectionType: 'ALL' };
   soniyaga qaytarish mumkin). Vaqtinchalik jadvallar — kirish kodlari
   va so'rov cheklovlari — bunga muhtoj emas, ular o'zi o'chadi.
 
-  Har bir jadval: bepul chegarada qolish uchun PAY_PER_REQUEST.
+  Eski jadvallar: PAY_PER_REQUEST (on-demand).
+
+  `capacity` — **bepul tarif** (AWS Free Tier) jadvali: PROVISIONED
+  rejim, jadval va har bir GSI ga qat'iy RCU/WCU (auto scaling yo'q),
+  PITR **yoqilmaydi** (pullik). Free Tier — hisob bo'yicha jami 25 RCU va
+  25 WCU; `test-tables.mjs` provisioned jami shu chegaradan oshmasligini
+  tekshiradi. Tashrif shifokorlari bo'limining uchala jadvali shunday
+  (ega talabi, 2026-11-27: hech qanday pullik imkoniyat yoqilmasin).
 */
+/** Free Tier: jadval va har bir GSI uchun 1 RCU / 1 WCU. */
+const FREE_TIER = { read: 1, write: 1 };
+
+/** Free Tier chegarasi (hisob bo'yicha, provisioned jadvallar jami). */
+export const FREE_TIER_LIMIT = { read: 25, write: 25 };
+
+/**
+ * CreateTable so'rovi (AWS SDK / CLI uchun bir xil JSON). `create-tables.mjs`
+ * ham, `cloudshell-setup.sh` generatori ham shu yerdan oladi — ikkalasi bir
+ * xil jadval yaratsin.
+ */
+export function createTableInput(table, prefix) {
+  const throughput = table.capacity
+    ? { ReadCapacityUnits: table.capacity.read, WriteCapacityUnits: table.capacity.write }
+    : null;
+  return {
+    TableName: `${prefix}_${table.name}`,
+    AttributeDefinitions: table.attrs,
+    KeySchema: table.keys,
+    ...(throughput ? { BillingMode: 'PROVISIONED', ProvisionedThroughput: throughput } : { BillingMode: 'PAY_PER_REQUEST' }),
+    ...(table.indexes
+      ? {
+          GlobalSecondaryIndexes: table.indexes.map((i) => (throughput ? { ...i, ProvisionedThroughput: throughput } : i)),
+        }
+      : {}),
+  };
+}
+
+/** Provisioned jadvallar (GSI bilan) jami sig'imi. */
+export function provisionedTotal(tableDefs) {
+  let read = 0;
+  let write = 0;
+  for (const t of tableDefs) {
+    if (!t.capacity) continue;
+    const parts = 1 + (t.indexes?.length ?? 0);
+    read += t.capacity.read * parts;
+    write += t.capacity.write * parts;
+  }
+  return { read, write };
+}
+
 export const tables = [
   {
     // phone-index: kirish va tahlil natijalari telefon bo'yicha bog'lanadi.
@@ -159,5 +207,42 @@ export const tables = [
     backup: true,
     attrs: [S('doctor_id'), S('created_at')],
     keys: [HASH('doctor_id'), RANGE('created_at')],
+  },
+  {
+    // Tashrif buyuruvchi shifokorlar — klinikaga ma'lum kunlarda tashqaridan
+    // keladigan mutaxassislar (travmatolog, endokrinolog ...). Asosiy
+    // `doctors` jadvalidan alohida: ularning jadvali "har shanba" yoki
+    // aniq sanalar, Telegram kabineti yo'q, matnlar uch tilda. Faqat
+    // /admin paneli yozadi.
+    name: 'visiting_doctors',
+    capacity: FREE_TIER,
+    attrs: [S('doctor_id')],
+    keys: [HASH('doctor_id')],
+  },
+  {
+    // Tashrif shifokorlariga yozilishlar. Kalit `appointments` bilan bir
+    // xil g'oya: PK "doctor_id#sana", SK vaqt — slot shartli yozuv bilan
+    // atomik band qilinadi, ikki kishi bir vaqtni ola olmaydi.
+    //
+    // date-index: admin "shu kungi yozilganlar" ni ko'radi.
+    // phone-index: bitta raqamdan kelgusi yozilishlar sonini cheklash.
+    name: 'visiting_bookings',
+    capacity: FREE_TIER,
+    attrs: [S('doctor_day'), S('time'), S('date'), S('starts_at'), S('phone')],
+    keys: [HASH('doctor_day'), RANGE('time')],
+    indexes: [
+      { IndexName: 'date-index', KeySchema: [HASH('date'), RANGE('starts_at')], Projection: ALL },
+      { IndexName: 'phone-index', KeySchema: [HASH('phone'), RANGE('starts_at')], Projection: ALL },
+    ],
+  },
+  {
+    // Saytdagi almashtiriladigan rasmlar (banner, galereya, shifokor
+    // rasmlari): slot -> Netlify Blobs'dagi fayl kaliti. Fayl o'zi
+    // Blobs'da, bu yerda faqat havola va o'lchamlar. Yozuv yo'q bo'lsa
+    // sayt repodagi standart rasmni ko'rsatadi.
+    name: 'site_media',
+    capacity: FREE_TIER,
+    attrs: [S('slot')],
+    keys: [HASH('slot')],
   },
 ];
