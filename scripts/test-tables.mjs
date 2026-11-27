@@ -26,7 +26,7 @@ const test = (name, fn) => {
 
 console.log('Jadval ta\'riflari:');
 
-test('14 ta jadval', () => assert.equal(tables.length, 14));
+test('17 ta jadval', () => assert.equal(tables.length, 17));
 
 test('har bir jadvalda nom, maydon va kalit bor', () => {
   for (const t of tables) {
@@ -92,12 +92,15 @@ test('kodda ishlatiladigan indekslar mavjud', () => {
   assert.ok(indexNames('appointments').includes('patient-index'));
   assert.ok(indexNames('appointments').includes('date-index'), 'cron eslatmalari shunga tayanadi');
   assert.ok(indexNames('visits').includes('date-index'), 'davomat cron\'i shunga tayanadi');
+  assert.ok(indexNames('visiting_bookings').includes('date-index'), 'admin yozilganlar ro\'yxati');
+  assert.ok(indexNames('visiting_bookings').includes('phone-index'), 'bitta raqam cheklovi');
 });
 
 test('bemor ma\'lumoti bor jadvallarda zaxira nusxa yoqiladi', () => {
   const kutilgan = [
     'users', 'individuals', 'doctors', 'schedules', 'appointments',
     'analysis_results', 'payments', 'lab_results', 'prices', 'ratings', 'visits',
+    'visiting_doctors', 'visiting_bookings', 'site_media',
   ];
   const bor = tables.filter((t) => t.backup).map((t) => t.name);
   assert.deepEqual(bor.sort(), [...kutilgan].sort(), 'zaxirali jadvallar ro\'yxati');

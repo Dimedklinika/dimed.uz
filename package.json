@@ -9,10 +9,13 @@
     "build": "astro build",
     "preview": "astro preview",
     "typecheck": "astro check && tsc --noEmit -p netlify/tsconfig.json",
-    "test": "npm run test:unit && npm run test:api",
+    "test": "npm run test:unit && npm run test:api && npm run test:visiting",
     "test:unit": "node --experimental-strip-types scripts/test-phone.mjs && node --experimental-strip-types scripts/test-safe-next.mjs && node --experimental-strip-types scripts/test-lib.mjs && node --experimental-strip-types scripts/test-slots.mjs && node --experimental-strip-types scripts/test-appointments.mjs && node --experimental-strip-types scripts/test-schedule.mjs && node scripts/test-link-doctor.mjs && node scripts/test-migrate-slot-minutes.mjs && node scripts/test-seed-prices.mjs && node --experimental-strip-types scripts/test-panels.mjs && node --experimental-strip-types scripts/test-analysis-dict.mjs && node --experimental-strip-types scripts/test-references.mjs && node --experimental-strip-types scripts/test-result-pdf.mjs && node --experimental-strip-types scripts/test-tables.mjs && node --experimental-strip-types scripts/test-services.mjs && node scripts/test-import-patients.mjs",
     "test:api": "node --experimental-strip-types scripts/test-api.mjs",
+    "test:visiting": "node --experimental-strip-types scripts/test-visiting.mjs",
     "create-tables": "node scripts/create-tables.mjs",
+    "create-visiting-tables": "node scripts/create-tables.mjs --only=visiting_doctors,visiting_bookings,site_media",
+    "migrate-images": "node --experimental-strip-types scripts/migrate-images.mjs",
     "seed-doctors": "node --experimental-strip-types scripts/seed-doctors.mjs",
     "seed-prices": "node scripts/seed-prices.mjs",
     "link-doctor": "node scripts/link-doctor.mjs",
@@ -26,14 +29,16 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.600.0",
     "@aws-sdk/lib-dynamodb": "^3.600.0",
+    "@netlify/blobs": "^10.7.13",
+    "@netlify/functions": "^2.8.0",
     "@tailwindcss/vite": "^4.0.0",
     "astro": "^5.0.0",
     "pdfmake": "^0.2.23",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4.0.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.0",
-    "@netlify/functions": "^2.8.0",
     "@types/node": "^26.2.0",
     "playwright": "^1.48.2",
     "typescript": "^5.5.0"
