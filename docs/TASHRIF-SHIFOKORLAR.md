@@ -59,6 +59,21 @@ Faqat uchta yangi jadval yaratiladi: `dimed_visiting_doctors`,
 `dimed_visiting_bookings`, `dimed_site_media`. Mavjud jadvallarga
 umuman murojaat qilinmaydi.
 
+**Pullik imkoniyat yoqilmaydi.** Jadvallar AWS Free Tier ichida:
+PROVISIONED rejim, jadval va har bir indeks 1 RCU / 1 WCU (uchalasi jami
+5 RCU / 5 WCU; bepul chegara — hisob bo'yicha 25/25), auto scaling yo'q,
+PITR (uzluksiz zaxira) yo'q. Rasm fayllari — Netlify Blobs (sayt tarifiga
+kiradi, bir necha MB), boshqa AWS xizmati (S3, CloudFront, Lambda)
+ishlatilmaydi.
+
+> 1 RCU / 1 WCU klinika uchun yetadi (DynamoDB foydalanilmagan sig'imni
+> 5 daqiqagacha jamlab, to'satdan ko'paygan so'rovlarni ham ko'taradi).
+> Juda ko'p tashrif bo'lsa (masalan reklama paytida) so'rov sekinlashishi
+> mumkin — unda sig'imni 25/25 chegarasi ichida oshirish mumkin.
+
+> **Zaxira:** PITR o'chiq, ya'ni yozilganlar jadvalini o'tgan vaqtga
+> qaytarib bo'lmaydi. Kerak bo'lsa — vaqti-vaqti bilan qo'lda eksport.
+
 > AWS IAM foydalanuvchisining huquqlari `dimed_*` jadvallarga
 > berilgan bo'lsa, yangilari ham shu ichiga tushadi. Agar huquq aniq
 > jadval nomlari bilan yozilgan bo'lsa — uchta yangi nomni (va
