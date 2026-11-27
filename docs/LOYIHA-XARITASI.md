@@ -147,6 +147,9 @@ Prefiks `dimed_`, region `us-east-1`. To'liq ta'rif —
 | `ratings` | `doctor_id` + `created_at` | — | sayt |
 | `rate_limits` | `bucket` | — (TTL) | sayt |
 | `login_sessions` | `nonce` | — (TTL) | sayt |
+| `visiting_doctors` | `doctor_id` (`v-…`) | — | `/admin` |
+| `visiting_bookings` | `doctor_day` + `time` | `date-index`, `phone-index` | sayt (yozilish), `/admin` (holat) |
+| `site_media` | `slot` | — | `/admin` (rasm havolasi; fayl o'zi Netlify Blobs'da) |
 
 `prices` jadvalida ikki xil yozuv: `item_id="analysis#<kod>"` — tahlil
 narxlari; `item_id="reference#<nom>#<jins>"`, `kind="reference"` —
@@ -156,7 +159,12 @@ ko'rsatkichlarning me'yoriy oraliqlari (admin kiritadi, F4). Ommaviy
 > **Qoida: har jadvalga faqat bitta tomon yozadi.** Buzilganda ma'lumot
 > jimgina bir-birini bosib ketadi.
 
-Bemor ma'lumoti bor 11 jadvalda **PITR** (35 kunlik zaxira) yoqilgan.
+Bemor ma'lumoti bor 14 jadvalda **PITR** (35 kunlik zaxira) yoqilgan.
+
+Rasmlar fayl sifatida **Netlify Blobs**'da (`dimed-media` ombori,
+kalit `u/<oy>/<tasodifiy>.webp`), DynamoDB'da faqat havola. Yangi
+jadvallarni jonli bazada yaratish: `npm run create-visiting-tables`
+(mavjud jadvallarga murojaat qilmaydi).
 
 ## 5. API — endpointlar
 
@@ -176,6 +184,15 @@ Manzil `/api/<fayl nomi>` (redirect `netlify.toml` da).
 | `logout.ts` | Sessiyani tugatadi |
 | `lc-results.ts` | 1C eski API yo'li (`X-API-Key`) — natija qabul qiladi |
 | `payment-webhook.ts` | Payme Merchant API (JSON-RPC) |
+
+### Tashrif buyuruvchi shifokorlar (ommaviy, kirishsiz)
+
+| Fayl | Nima qiladi |
+| --- | --- |
+| `site-content.ts` | Kartalar + admin almashtirgan rasmlar; CDN'da, `site-content` tegi bilan |
+| `visiting-slots.ts` | Yaqin kelish kunlari va faqat bo'sh vaqtlar (keshsiz) |
+| `visiting-book.ts` | Yozilish: atomik slot, IP / telefon cheklovi, xato `code` bilan |
+| `media.ts` | `/media/u/<kalit>` (bir yillik kesh) va `/media/slot/<slot>` (og:image) |
 
 ### Bemor (sessiya kerak)
 
@@ -206,6 +223,18 @@ Manzil `/api/<fayl nomi>` (redirect `netlify.toml` da).
 | `admin-prices.ts` | Tahlil narxlari |
 | `admin-references.ts` | Ko'rsatkichlar me'yoriy (referens) oraliqlari (F4) |
 | `admin-ratings.ts` | Bemor baholari, yashirish |
+
+### `/admin` paneli (parol — `ADMIN_PASSWORD`, cookie `dimed_admin`)
+
+| Fayl | Nima qiladi |
+| --- | --- |
+| `admin-auth.ts` | Kirish / chiqish, IP bo'yicha urinish cheklovi |
+| `admin-visiting.ts` | Tashrif shifokorlari: qo'shish, tahrirlash, yashirish, o'chirish |
+| `admin-visiting-bookings.ts` | Yozilganlar (sana oralig'i, shifokor), holat |
+| `admin-upload.ts` | Rasm yuklash → siqish → Blobs |
+| `admin-media.ts` | Banner, galereya, shifokor rasmlarini almashtirish / qaytarish |
+
+`/kabinet/admin` (Telegram, `ADMIN_TELEGRAM_IDS`) bilan aralashmaydi.
 
 ### Cron (Netlify Scheduled Functions)
 
@@ -249,6 +278,11 @@ da — alohida ro'yxat yo'q.
 | `telegram.ts` | Bot API: xabar, tugma, log-botga xato |
 | `i18n.ts` | Bot matnlari uch tilda |
 | `payment.ts` | Payme adapteri |
+| `admin-auth.ts` | `/admin` paroli, imzolangan cookie, CSRF tekshiruvi |
+| `visiting.ts` | Tashrif shifokorlari: kelish kunlari, bo'sh vaqt, admin kiritganini tekshirish |
+| `media.ts` | Netlify Blobs ombori, rasmni siqish (sharp → WebP; banner — JPEG 1200×630) |
+| `media-slots.ts` | Almashtiriladigan rasm o'rinlari (banner, galereya, `doctor-<id>`) |
+| `cache.ts` | Netlify CDN kesh sarlavhalari va teg bo'yicha tozalash (`purgeCache`) |
 
 ## 7. Sahifalar (`src/pages/`)
 
@@ -272,6 +306,8 @@ da — alohida ro'yxat yo'q.
 | `/kabinet/admin/referenslar` | `.../referenslar.astro` | Referens (me'yoriy) qiymatlar |
 | `/kabinet/admin/baholar` | `.../baholar.astro` | Baholar |
 | `/maxfiylik` | `maxfiylik.astro` | Maxfiylik siyosati |
+| `/tashrif-shifokorlar` (+ ru/en) | `[...lang]/tashrif-shifokorlar.astro` | Tashrif shifokorlari, yozilish |
+| `/admin` | `admin.astro` | Parol bilan kiriladigan panel (shifokorlar, yozilganlar, rasmlar) |
 | 404 | `404.astro` | Topilmadi sahifasi |
 | `/sitemap.xml`, `/robots.txt` | `*.ts` | Yig'ilishda hosil bo'ladi |
 
@@ -292,6 +328,8 @@ kabinet sahifalari esa bitta — til brauzerda almashtiriladi
 | `npm run build-analyses` | `build-analyses.mjs` | `legacy/` dan `analyses.json` |
 | `npm run gen-cloudshell` | `gen-cloudshell-setup.mjs` | `cloudshell-setup.sh` ni qayta yasaydi |
 | `npm run migrate-slot-minutes` | `migrate-slot-minutes.mjs` | Bir martalik migratsiya |
+| `npm run create-visiting-tables` | `create-tables.mjs --only=…` | Faqat yangi 3 jadval |
+| `npm run migrate-images` | `migrate-images.mjs` | Repodagi rasmlarni Blobs'ga (bir marta) |
 
 `scripts/aws-env.mjs` — barcha skriptlar uchun AWS sozlamasi
 (`env.ts` bilan bir xil qoida). `scripts/tables.mjs` — jadval
@@ -311,7 +349,8 @@ ta'riflarining **yagona manbasi**.
 | `test-panels.mjs` | Tahlil nomini tanish (bazadagi haqiqiy ma'lumot bo'yicha) |
 | `test-tables.mjs` | Jadval ta'riflari + `cloudshell-setup.sh` mosligi |
 | `test-phone.mjs` | Telefon normallashtirish |
-| `test-e2e.mjs` | Brauzer (Playwright): bron vidjeti, yopiq sahifalar |
+| `test-visiting.mjs` | Tashrif shifokorlari, `/admin` API, rasmlar, ko'chirish skripti |
+| `test-e2e.mjs` | Brauzer (Playwright): bron vidjeti, yopiq sahifalar, tashrif shifokoriga yozilish |
 
 `scripts/fake-dynamo.mjs` — **xotiradagi soxta DynamoDB**. Testlar
 haqiqiy AWS'siz ishlaydi: CI da hech qanday kalit kerak emas. Yangi

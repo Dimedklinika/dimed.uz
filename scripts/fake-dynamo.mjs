@@ -24,6 +24,9 @@ const keySchema = {
   test_ratings: ['doctor_id', 'created_at'],
   test_rate_limits: ['bucket'],
   test_login_sessions: ['nonce'],
+  test_visiting_doctors: ['doctor_id'],
+  test_visiting_bookings: ['doctor_day', 'time'],
+  test_site_media: ['slot'],
 };
 for (const t of Object.keys(keySchema)) tables.set(t, new Map());
 

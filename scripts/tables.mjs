@@ -160,4 +160,41 @@ export const tables = [
     attrs: [S('doctor_id'), S('created_at')],
     keys: [HASH('doctor_id'), RANGE('created_at')],
   },
+  {
+    // Tashrif buyuruvchi shifokorlar — klinikaga ma'lum kunlarda tashqaridan
+    // keladigan mutaxassislar (travmatolog, endokrinolog ...). Asosiy
+    // `doctors` jadvalidan alohida: ularning jadvali "har shanba" yoki
+    // aniq sanalar, Telegram kabineti yo'q, matnlar uch tilda. Faqat
+    // /admin paneli yozadi.
+    name: 'visiting_doctors',
+    backup: true,
+    attrs: [S('doctor_id')],
+    keys: [HASH('doctor_id')],
+  },
+  {
+    // Tashrif shifokorlariga yozilishlar. Kalit `appointments` bilan bir
+    // xil g'oya: PK "doctor_id#sana", SK vaqt — slot shartli yozuv bilan
+    // atomik band qilinadi, ikki kishi bir vaqtni ola olmaydi.
+    //
+    // date-index: admin "shu kungi yozilganlar" ni ko'radi.
+    // phone-index: bitta raqamdan kelgusi yozilishlar sonini cheklash.
+    name: 'visiting_bookings',
+    backup: true,
+    attrs: [S('doctor_day'), S('time'), S('date'), S('starts_at'), S('phone')],
+    keys: [HASH('doctor_day'), RANGE('time')],
+    indexes: [
+      { IndexName: 'date-index', KeySchema: [HASH('date'), RANGE('starts_at')], Projection: ALL },
+      { IndexName: 'phone-index', KeySchema: [HASH('phone'), RANGE('starts_at')], Projection: ALL },
+    ],
+  },
+  {
+    // Saytdagi almashtiriladigan rasmlar (banner, galereya, shifokor
+    // rasmlari): slot -> Netlify Blobs'dagi fayl kaliti. Fayl o'zi
+    // Blobs'da, bu yerda faqat havola va o'lchamlar. Yozuv yo'q bo'lsa
+    // sayt repodagi standart rasmni ko'rsatadi.
+    name: 'site_media',
+    backup: true,
+    attrs: [S('slot')],
+    keys: [HASH('slot')],
+  },
 ];

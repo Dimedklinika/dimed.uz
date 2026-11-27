@@ -40,7 +40,9 @@ const bare = Astro.url.pathname.replace(/^\/(ru|en)(?=\/|$)/, '') || '/';
 const alternates = lang
   ? LANGS.map((code) => ({ code, href: new URL(langHref(bare, code), origin).href }))
   : [];
-const ogImage = new URL('/images/og-cover.jpg', origin).href;
+// Banner admin panelda almashtiriladi (/admin → Rasmlar): manzil o'zgarmaydi,
+// `/media/slot/banner` hozirgi rasmni beradi (yo'q bo'lsa /images/og-cover.jpg).
+const ogImage = new URL('/media/slot/banner', origin).href;
 ---
 
 <!doctype html>
