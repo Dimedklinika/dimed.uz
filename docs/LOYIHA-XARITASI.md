@@ -159,7 +159,13 @@ ko'rsatkichlarning me'yoriy oraliqlari (admin kiritadi, F4). Ommaviy
 > **Qoida: har jadvalga faqat bitta tomon yozadi.** Buzilganda ma'lumot
 > jimgina bir-birini bosib ketadi.
 
-Bemor ma'lumoti bor 14 jadvalda **PITR** (35 kunlik zaxira) yoqilgan.
+Bemor ma'lumoti bor 11 ta eski jadvalda **PITR** (35 kunlik zaxira) yoqilgan.
+
+Tashrif bo'limining uchta jadvali (`visiting_doctors`, `visiting_bookings`,
+`site_media`) — **AWS Free Tier**'da: PROVISIONED, jadval va har GSI ga
+1 RCU / 1 WCU (jami 5/5, chegara 25/25), auto scaling va PITR yo'q (ega
+talabi: pullik imkoniyat yoqilmasin). Qoida `scripts/tables.mjs` da
+(`capacity`), `test-tables.mjs` jami 25 dan oshmasligini tekshiradi.
 
 Rasmlar fayl sifatida **Netlify Blobs**'da (`dimed-media` ombori,
 kalit `u/<oy>/<tasodifiy>.webp`), DynamoDB'da faqat havola. Yangi

@@ -22,7 +22,7 @@ npm run dev             # http://localhost:4321
 | `npm run typecheck` | Astro va funksiyalar tiplarini tekshirish |
 | `npm test` | Barcha tekshiruvlar (mantiq + API) |
 | `npm run create-tables` | DynamoDB jadvallarini yaratish (bir marta) |
-| `npm run create-visiting-tables` | Faqat yangi jadvallar: `visiting_doctors`, `visiting_bookings`, `site_media` |
+| `npm run create-visiting-tables` | Faqat yangi jadvallar: `visiting_doctors`, `visiting_bookings`, `site_media` — Free Tier (PROVISIONED 1/1, PITR yo'q) |
 | `npm run migrate-images` | Repodagi rasmlarni Netlify Blobs'ga ko'chirish (bir marta; `--dry`, `--force`) |
 | `npm run seed-doctors` | Shifokorlarni bazaga yozish |
 | `npm run seed-prices` | Tahlil narxlarini `prices` jadvaliga yozish (bir marta; `--dry`, `--force`) |

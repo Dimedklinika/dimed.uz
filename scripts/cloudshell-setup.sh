@@ -580,11 +580,14 @@ jadval "visiting_doctors" "$(cat <<JSON
       "KeyType": "HASH"
     }
   ],
-  "BillingMode": "PAY_PER_REQUEST"
+  "BillingMode": "PROVISIONED",
+  "ProvisionedThroughput": {
+    "ReadCapacityUnits": 1,
+    "WriteCapacityUnits": 1
+  }
 }
 JSON
 )"
-pitr "visiting_doctors"
 
 jadval "visiting_bookings" "$(cat <<JSON
 {
@@ -621,7 +624,11 @@ jadval "visiting_bookings" "$(cat <<JSON
       "KeyType": "RANGE"
     }
   ],
-  "BillingMode": "PAY_PER_REQUEST",
+  "BillingMode": "PROVISIONED",
+  "ProvisionedThroughput": {
+    "ReadCapacityUnits": 1,
+    "WriteCapacityUnits": 1
+  },
   "GlobalSecondaryIndexes": [
     {
       "IndexName": "date-index",
@@ -637,6 +644,10 @@ jadval "visiting_bookings" "$(cat <<JSON
       ],
       "Projection": {
         "ProjectionType": "ALL"
+      },
+      "ProvisionedThroughput": {
+        "ReadCapacityUnits": 1,
+        "WriteCapacityUnits": 1
       }
     },
     {
@@ -653,13 +664,16 @@ jadval "visiting_bookings" "$(cat <<JSON
       ],
       "Projection": {
         "ProjectionType": "ALL"
+      },
+      "ProvisionedThroughput": {
+        "ReadCapacityUnits": 1,
+        "WriteCapacityUnits": 1
       }
     }
   ]
 }
 JSON
 )"
-pitr "visiting_bookings"
 
 jadval "site_media" "$(cat <<JSON
 {
@@ -676,11 +690,14 @@ jadval "site_media" "$(cat <<JSON
       "KeyType": "HASH"
     }
   ],
-  "BillingMode": "PAY_PER_REQUEST"
+  "BillingMode": "PROVISIONED",
+  "ProvisionedThroughput": {
+    "ReadCapacityUnits": 1,
+    "WriteCapacityUnits": 1
+  }
 }
 JSON
 )"
-pitr "site_media"
 
 # --- 2-qadam: jadvallar tayyor bo'lishini kutamiz ---
 echo

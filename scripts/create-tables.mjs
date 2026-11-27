@@ -18,7 +18,7 @@ import {
 } from '@aws-sdk/client-dynamodb';
 
 import { clientConfig, printTarget, PREFIX as prefix } from './aws-env.mjs';
-import { tables } from './tables.mjs';
+import { tables, createTableInput } from './tables.mjs';
 
 const client = new DynamoDBClient(clientConfig());
 printTarget();
@@ -80,16 +80,13 @@ for (const table of only ? tables.filter((t) => only.has(t.name)) : tables) {
     continue;
   }
 
-  await client.send(
-    new CreateTableCommand({
-      TableName,
-      AttributeDefinitions: table.attrs,
-      KeySchema: table.keys,
-      BillingMode: 'PAY_PER_REQUEST',
-      ...(table.indexes ? { GlobalSecondaryIndexes: table.indexes } : {}),
-    }),
+  await client.send(new CreateTableCommand(createTableInput(table, prefix)));
+  console.log(
+    table.capacity
+      ? `+ ${TableName} yaratildi — PROVISIONED ${table.capacity.read} RCU / ${table.capacity.write} WCU` +
+          `${table.indexes?.length ? ` (+ ${table.indexes.length} GSI, har biri ${table.capacity.read}/${table.capacity.write})` : ''}, PITR yo'q`
+      : `+ ${TableName} yaratildi`,
   );
-  console.log(`+ ${TableName} yaratildi`);
 
   if (table.ttlAttribute) {
     await waitUntilTableExists({ client, maxWaitTime: 120 }, { TableName });

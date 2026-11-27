@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { tables } from './tables.mjs';
+import { tables, createTableInput } from './tables.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -57,13 +57,7 @@ const FIELDS = [
 /** Skript matnini qaytaradi — sof funksiya, test shuni chaqiradi. */
 export function buildScript(tableDefs, doctors) {
   const tableBlocks = tableDefs.map((t) => {
-    const body = {
-      TableName: `__PREFIX___${t.name}`,
-      AttributeDefinitions: t.attrs,
-      KeySchema: t.keys,
-      BillingMode: 'PAY_PER_REQUEST',
-      ...(t.indexes ? { GlobalSecondaryIndexes: t.indexes } : {}),
-    };
+    const body = createTableInput(t, '__PREFIX__');
     const json = JSON.stringify(body, null, 2).replaceAll('__PREFIX__', '${PREFIX}');
     const ttl = t.ttlAttribute ? `\nttl "${t.name}" "${t.ttlAttribute}"` : '';
     const pitr = t.backup ? `\npitr "${t.name}"` : '';
