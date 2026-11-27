@@ -2,7 +2,7 @@
 
 Dimed klinikasi (Chinoz) sayti: onlayn navbat, Telegram orqali kirish,
 shaxsiy kabinet, laboratoriya natijalari, tashrif buyuruvchi shifokorlarga
-yozilish va parol bilan kiriladigan `/admin` paneli.
+yozilish; admin panel — `/kabinet/admin` (Telegram orqali kirish).
 
 **Stack:** Astro + Tailwind CSS + TypeScript · Netlify Functions · Netlify Blobs (rasmlar) · Amazon DynamoDB + S3 · Telegram Bot API
 
@@ -92,13 +92,14 @@ legacy/           eski Jekyll sayti (arxiv, deploy qilinmaydi)
 | `GET /api/visiting-slots` | Tashrif shifokorining yaqin kunlari va **faqat bo'sh** vaqtlari |
 | `POST /api/visiting-book` | Tashrif shifokoriga yozilish (kirishsiz, bepul, to'lov klinikada) |
 | `GET /media/*` | Netlify Blobs'dagi rasmlar; `/media/slot/banner` — og:image |
-| `GET,POST,DELETE /api/admin-auth` | `/admin` ga parol bilan kirish / chiqish |
-| `GET,POST,PATCH,DELETE /api/admin-visiting` | Admin: tashrif shifokorlari |
-| `GET,POST /api/admin-visiting-bookings` | Admin: yozilganlar, holat |
+| `GET,POST,PATCH,DELETE /api/admin-visiting` | Admin: tashrif shifokorlari (`/kabinet/admin/tashrif`) |
+| `GET,POST /api/admin-visiting-bookings` | Admin: tashrif yozuvlari, holat (`/kabinet/admin/tashrif-yozuvlar`) |
 | `POST /api/admin-upload` | Admin: rasm yuklash (siqish, WebP) |
-| `GET,POST,DELETE /api/admin-media` | Admin: banner, galereya, shifokor rasmlari |
+| `GET,POST,DELETE /api/admin-media` | Admin: banner, galereya, shifokor rasmlari (`/kabinet/admin/rasmlar`) |
 
-Tashrif shifokorlari va `/admin` paneli haqida batafsil —
+Admin endpointlarining hammasi bitta kirish bilan ishlaydi: Telegram sessiyasi +
+`ADMIN_TELEGRAM_IDS`. Eski `/admin` manzili `/kabinet/admin` ga 301 bilan yo'naltiriladi.
+Tashrif shifokorlari va rasmlar haqida batafsil —
 [`docs/TASHRIF-SHIFOKORLAR.md`](docs/TASHRIF-SHIFOKORLAR.md).
 
 ### Rejalashtirilgan funksiyalar (cron)
@@ -194,7 +195,7 @@ tizimini ulaydigan dasturchiga (kassa ochilgach).
 
 | Fayl | Kim uchun |
 | --- | --- |
-| [`docs/TASHRIF-SHIFOKORLAR.md`](docs/TASHRIF-SHIFOKORLAR.md) | Klinika egasi — `/admin` paneli, tashrif shifokorlari, rasmlar; ishga tushirish |
+| [`docs/TASHRIF-SHIFOKORLAR.md`](docs/TASHRIF-SHIFOKORLAR.md) | Klinika egasi — tashrif shifokorlari, yozuvlar, sayt rasmlari (`/kabinet/admin`); ishga tushirish |
 | [`docs/LOYIHA-XARITASI.md`](docs/LOYIHA-XARITASI.md) | **Yangi dasturchi yoki AI — nima qayerda: oqimlar, jadvallar, endpointlar, tuzoqlar** |
 | [`docs/OCHILISH-REJASI.md`](docs/OCHILISH-REJASI.md) | Klinika egasi — ochilishdan oldingi to'rt qadam (deploy, 1C, shifokorlar, sozlamalar) |
 | [`docs/QOLGAN-ISHLAR.md`](docs/QOLGAN-ISHLAR.md) | Klinika egasi — hozir nima qilish kerak (joriy ro'yxat) |
