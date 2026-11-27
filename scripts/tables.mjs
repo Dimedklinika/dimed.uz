@@ -213,7 +213,7 @@ export const tables = [
     // keladigan mutaxassislar (travmatolog, endokrinolog ...). Asosiy
     // `doctors` jadvalidan alohida: ularning jadvali "har shanba" yoki
     // aniq sanalar, Telegram kabineti yo'q, matnlar uch tilda. Faqat
-    // /admin paneli yozadi.
+    // admin (/kabinet/admin/tashrif) yozadi.
     name: 'visiting_doctors',
     capacity: FREE_TIER,
     attrs: [S('doctor_id')],

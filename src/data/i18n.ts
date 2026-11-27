@@ -445,6 +445,9 @@ export const messages = {
   'cabinet.menu.ratings': { uz: 'Baholar', ru: 'Оценки', en: 'Ratings' },
   'cabinet.menu.clinicAppointments': { uz: 'Klinika navbatlari', ru: 'Записи клиники', en: 'Clinic appointments' },
   'cabinet.menu.references': { uz: 'Me’yoriy qiymatlar', ru: 'Референсы', en: 'Reference ranges' },
+  'cabinet.menu.visiting': { uz: 'Tashrif shifokorlari', ru: 'Приглашённые врачи', en: 'Visiting doctors' },
+  'cabinet.menu.visitingBookings': { uz: 'Tashrif yozuvlari', ru: 'Записи к приглашённым', en: 'Visiting bookings' },
+  'cabinet.menu.media': { uz: 'Sayt rasmlari', ru: 'Фото сайта', en: 'Site images' },
   'cabinet.menu.doctorArea': { uz: 'Shifokor kabineti', ru: 'Кабинет врача', en: 'Doctor cabinet' },
   'cabinet.menu.adminArea': { uz: 'Administrator', ru: 'Администратор', en: 'Administrator' },
 
