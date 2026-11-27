@@ -149,8 +149,11 @@ Parolni bitta qurilmadan 15 daqiqada 5 martadan ko'p xato kiritib bo'lmaydi; ham
 - Yozilish: qabul boshlanishiga kamida **1 soat** qolganda; **60 kun**
   oldinga; formada yaqin **8** ta kelish kuni.
 - Bitta telefon raqamidan bir vaqtda **3** tadan ko'p kelgusi yozuv
-  bo'lmaydi, bitta shifokorga bir kunda bittadan. Bitta IP dan soatiga
-  8 ta urinish — botlarga qarshi.
+  bo'lmaydi (oila a'zolari uchun bir kunda bir nechta yozuv mumkin).
+  Bitta IP dan soatiga 8 ta urinish — botlarga qarshi.
+- Sayt begona raqam haqida hech narsa aytmaydi: «bu raqam allaqachon
+  yozilgan» yoki «N ta yozuvi bor» kabi javoblar yo'q — aks holda
+  raqamni bilgan odam uning kimga yozilganini bilib olardi.
 - Sayt kartalari CDN keshida turadi: admin saqlaganda kesh darhol
   tozalanadi. Juda kamdan-kam hollarda 5 daqiqagacha eski ko'rinishi
   mumkin.

@@ -433,10 +433,16 @@ await test('bir vaqtda ikki so‘rov — faqat bittasi o‘tadi', async () => {
   assert.deepEqual([a.status, b.status].sort(), [200, 409]);
 });
 
-await test('bitta raqamdan shu kunga ikkinchi marta yozilmaydi', async () => {
-  const res = await call(visitingBook, '/api/visiting-book', post(booking({ time: '11:00' })));
-  assert.equal(res.status, 409);
-  assert.equal((await res.json()).code, 'duplicate');
+await test('begona raqam haqida hech narsa oshkor qilinmaydi; 3 tadan ortiq kelgusi yozuv yo‘q', async () => {
+  // Oila: bitta raqamdan shu kunga yana yozilish mumkin — "allaqachon yozilgansiz"
+  // degan javob begona odamga kimdir shu shifokorga yozilganini aytib qo'yardi.
+  assert.equal((await call(visitingBook, '/api/visiting-book', post(booking({ time: '11:00', name: 'Aliyeva Malika' })))).status, 200);
+  assert.equal((await call(visitingBook, '/api/visiting-book', post(booking({ time: '11:30', name: 'Aliyev Sardor' })))).status, 200);
+  const fourth = await call(visitingBook, '/api/visiting-book', post(booking({ date: extraDate, time: '09:00', name: 'Aliyev Bobur' })));
+  assert.equal(fourth.status, 409);
+  const body = await fourth.json();
+  assert.equal(body.code, 'limit');
+  assert.ok(!/\d/.test(body.error), `xabarda son bor: ${body.error}`);
 });
 
 await test('noto‘g‘ri ma’lumot rad etiladi (kod bilan)', async () => {
@@ -482,12 +488,11 @@ await test('kun bo‘yicha ro‘yxat, telefon to‘liq', async () => {
   assert.equal(res.status, 200);
   const body = await res.json();
   rows = body.bookings;
-  assert.equal(rows.length, 2);
-  assert.equal(rows[0].time, '09:30');
+  assert.deepEqual(rows.map((r) => r.time), ['09:30', '10:30', '11:00', '11:30']);
   assert.equal(rows[0].phone, '+998901234567');
-  assert.equal(body.counts.booked, 2);
+  assert.equal(body.counts.booked, 4);
   const other = await (await call(adminBookings, `/api/admin-visiting-bookings?from=${extraDate}&to=${extraDate}`, withCookie(cookie))).json();
-  assert.equal(other.bookings.length, extraDate === nextSaturday ? 2 : 0);
+  assert.equal(other.bookings.length, extraDate === nextSaturday ? 4 : 0);
 });
 
 await test('holat: keldi / kelmadi', async () => {
@@ -518,6 +523,49 @@ await test('kelgusi yozuvi bor shifokor o‘chirilishidan oldin ogohlantiriladi'
   const del = await call(adminVisiting, '/api/admin-visiting', withCookie(cookie, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: doctorId }) }));
   assert.equal(del.status, 409);
   assert.ok((await del.json()).upcoming >= 1);
+});
+
+console.log('\nBemor ma’lumoti: avtorizatsiyasiz kirish:');
+
+await test('har bir admin endpoint, har bir metod — cookie‘siz, soxta va eskirgan cookie bilan 401, telefon chiqmaydi', async () => {
+  const { createAdminCookie } = await lib('admin-auth.ts');
+  const expired = createAdminCookie(Date.now() - 13 * 3600_000).split(';')[0];
+  const forged = 'dimed_admin=' + Buffer.from(JSON.stringify({ exp: 9999999999, n: 'x' })).toString('base64url') + '.AAAA';
+  const endpoints = [
+    [adminVisiting, '/api/admin-visiting', ['GET', 'POST', 'PATCH', 'DELETE']],
+    [adminBookings, `/api/admin-visiting-bookings?from=${nextSaturday}&to=${nextSaturday}`, ['GET', 'POST']],
+    [adminUpload, '/api/admin-upload?purpose=doctor', ['POST']],
+    [adminMedia, '/api/admin-media', ['GET', 'POST', 'DELETE']],
+  ];
+  let checked = 0;
+  for (const [fn, path, methods] of endpoints) {
+    for (const method of methods) {
+      for (const c of [null, forged, expired]) {
+        const init = { method, headers: { 'content-type': 'application/json', ...(c ? { cookie: c } : {}) } };
+        if (method !== 'GET') init.body = JSON.stringify({ id: doctorId, status: 'cancelled', ...rows[0] });
+        const res = await call(fn, path, init);
+        const text = await res.text();
+        assert.equal(res.status, 401, `${method} ${path} (${c ? 'cookie' : 'cookie yo‘q'}) → ${res.status}`);
+        assert.ok(!/\+?998\d{9}|Aliyev/.test(text), `${method} ${path}: javobda bemor ma’lumoti`);
+        checked++;
+      }
+    }
+  }
+  assert.equal(checked, 30);
+  // Yozuvlar o'zgarmagan: hech biri bekor qilinmagan.
+  const still = await (await call(adminBookings, `/api/admin-visiting-bookings?from=${nextSaturday}&to=${nextSaturday}`, withCookie(cookie))).json();
+  assert.ok(still.bookings.every((b) => b.status !== 'cancelled' || b.time === rows[1].time));
+});
+
+await test('ommaviy javoblarda bemor ismi va telefoni yo‘q', async () => {
+  const bodies = [
+    await (await call(siteContent, '/api/site-content')).text(),
+    await (await call(visitingSlots, `/api/visiting-slots?doctor=${doctorId}`)).text(),
+    await (await call(adminAuth, '/api/admin-auth')).text(),
+  ];
+  for (const text of bodies) {
+    assert.ok(!/\+?998\d{9}|Aliyev|Yangi Bemor|Birinchi Odam|Ikkinchi Odam/.test(text), text.slice(0, 120));
+  }
 });
 
 console.log('\nSayt rasmlari:');

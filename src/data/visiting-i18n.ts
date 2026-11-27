@@ -148,15 +148,11 @@ const copy = {
     ru: 'До приёма меньше часа — выберите другое время.',
     en: 'This visit starts in less than an hour — please choose another time.',
   },
-  'e.duplicate': {
-    uz: 'Bu raqamdan shu kunga allaqachon yozilgansiz.',
-    ru: 'С этого номера вы уже записаны на этот день.',
-    en: 'This number is already booked for this day.',
-  },
+  // Begona raqam haqida hech narsa aytilmaydi (nechta yozuvi bor, qaysi shifokorga).
   'e.limit': {
-    uz: 'Bu raqamda kelgusi yozuvlar koʻp. Klinikaga qoʻngʻiroq qiling.',
-    ru: 'На этом номере уже много записей. Позвоните в клинику.',
-    en: 'This number already has several bookings. Please call the clinic.',
+    uz: 'Bu raqam bilan onlayn yozilib boʻlmaydi. Klinikaga qoʻngʻiroq qiling.',
+    ru: 'С этим номером нельзя записаться онлайн. Позвоните в клинику.',
+    en: 'This number cannot be booked online. Please call the clinic.',
   },
   'e.rate': {
     uz: 'Juda koʻp urinish. Birozdan soʻng qayta urinib koʻring.',

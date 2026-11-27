@@ -36,8 +36,14 @@ import { isLang } from '../../src/data/i18n.ts';
  * bir vaqtni bir zumda tanlasa, ikkinchisi 409 oladi.
  *
  * Suiiste'molga qarshi: IP bo'yicha soatiga 8 ta urinish, bitta raqamda
- * bir vaqtda 3 tadan ko'p kelgusi yozuv bo'lmaydi va bitta shifokorga
- * bir kunda bitta yozuv; `website` — botlar to'ldiradigan yashirin maydon.
+ * bir vaqtda 3 tadan ko'p kelgusi yozuv bo'lmaydi; `website` — botlar
+ * to'ldiradigan yashirin maydon.
+ *
+ * Maxfiylik: kirishsiz endpoint begona raqam haqida hech narsa aytmasligi
+ * kerak. Shuning uchun "bu raqam shu kunga shu shifokorga yozilgan" degan
+ * tekshiruv yo'q (u kimdir endokrinologga yozilganini tasdiqlab berardi —
+ * oila a'zolari uchun bir kunda ikki yozuv esa odatiy hol), cheklov xabari
+ * esa yozuvlar sonini aytmaydi.
  */
 const MAX_PER_IP_HOUR = 8;
 const MAX_UPCOMING_PER_PHONE = 3;
@@ -108,15 +114,8 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     }
 
     const upcoming = await upcomingByPhone(phone.value, now);
-    if (upcoming.some((b) => b.doctor_id === doctorId && b.date === date)) {
-      return fail('duplicate', 'Bu raqamdan shu kunga allaqachon yozilgansiz', 409);
-    }
     if (upcoming.length >= MAX_UPCOMING_PER_PHONE) {
-      return fail(
-        'limit',
-        `Bu raqamda ${upcoming.length} ta kelgusi yozuv bor — bir vaqtda ${MAX_UPCOMING_PER_PHONE} tadan ko‘p bo‘lmaydi. Klinikaga qo‘ng‘iroq qiling.`,
-        409,
-      );
+      return fail('limit', 'Bu raqam bilan onlayn yozilib bo‘lmaydi — klinikaga qo‘ng‘iroq qiling.', 409);
     }
 
     const item: VisitingBooking = {
