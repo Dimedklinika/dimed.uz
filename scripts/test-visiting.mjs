@@ -627,6 +627,150 @@ await test('shifokor o‘chiriladi (majburan) — yozuvlar qoladi, rasm o‘chad
   assert.match(body.bookings[0].doctorName, /Karimov Jasur/);
 });
 
+console.log('\nRasm yuklash: hajm va mazmun tekshiruvi:');
+
+const upload = (fn, path, body, headers = {}) =>
+  call(fn, path, withCookie(cookie, { method: 'POST', headers, body }));
+
+await test('4 MB dan katta fayl: e’lon qilingan hajm — 413, e’lonsiz — 422', async () => {
+  const big = new Uint8Array(4 * 1024 * 1024 + 1);
+  big.set([0xff, 0xd8, 0xff, 0xe0]);
+  for (const [fn, path] of [[adminUpload, '/api/admin-upload?purpose=doctor'], [adminMedia, '/api/admin-media?slot=gallery-lab']]) {
+    const declared = await upload(fn, path, big, { 'content-length': String(big.length) });
+    assert.equal(declared.status, 413, path);
+    const chunked = await upload(fn, path, big);
+    assert.equal(chunked.status, 422, path);
+    assert.match((await chunked.json()).error, /4 MB/);
+  }
+});
+
+await test('rasm mazmun bo‘yicha tekshiriladi, kengaytma/sarlavha bo‘yicha emas', async () => {
+  // JPEG "imzosi" bor, ichi esa axlat — sharp ham, sharp'siz yo'l ham rad etadi.
+  const fake = new Uint8Array(2048).fill(0x41);
+  fake.set([0xff, 0xd8, 0xff, 0xe0]);
+  assert.equal((await upload(adminUpload, '/api/admin-upload?purpose=doctor', fake, { 'content-type': 'image/jpeg' })).status, 422);
+  process.env.DIMED_NO_SHARP = '1';
+  try {
+    assert.equal((await upload(adminUpload, '/api/admin-upload?purpose=doctor', fake, { 'content-type': 'image/jpeg' })).status, 422);
+  } finally {
+    delete process.env.DIMED_NO_SHARP;
+  }
+  // SVG (skript bo'lishi mumkin) va GIF — rad.
+  const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+  assert.equal((await upload(adminUpload, '/api/admin-upload?purpose=doctor', svg, { 'content-type': 'image/svg+xml' })).status, 422);
+  const gif = new TextEncoder().encode('GIF89a' + 'x'.repeat(64));
+  assert.equal((await upload(adminUpload, '/api/admin-upload?purpose=doctor', gif, { 'content-type': 'image/gif' })).status, 422);
+  // Haqiqiy WebP "text/plain" deb yuborilsa ham qabul qilinadi — sarlavhaga ishonilmaydi.
+  const webp = readFileSync(join(root, 'public/images/klinika-laboratoriya.webp'));
+  const ok = await upload(adminUpload, '/api/admin-upload?purpose=doctor', webp, { 'content-type': 'text/plain' });
+  assert.equal(ok.status, 200);
+  const served = await call(media, (await ok.json()).url);
+  assert.equal(served.headers.get('content-type'), 'image/webp');
+  assert.equal(served.headers.get('x-content-type-options'), 'nosniff');
+});
+
+console.log('\nVaqt: Asia/Tashkent, yarim tun atrofi:');
+
+const RealDate = Date;
+/** Funksiyalar uchun "hozir"ni vaqtincha o'zgartiradi (new Date() va Date.now()). */
+async function atTime(iso, fn) {
+  const fixed = new RealDate(iso).getTime();
+  class FakeDate extends RealDate {
+    constructor(...args) {
+      super(...(args.length ? args : [fixed]));
+    }
+    static now() {
+      return fixed;
+    }
+  }
+  globalThis.Date = FakeDate;
+  try {
+    return await fn();
+  } finally {
+    globalThis.Date = RealDate;
+  }
+}
+
+const D = addDaysKey(today, 5);
+const D1 = addDaysKey(D, 1);
+const D2 = addDaysKey(D, 2);
+let nightId = '';
+
+await test('sana chegarasi: UTC 18:59 — hali shu kun, 19:00 — Toshkentda ertangi kun', () => {
+  assert.equal(tashkentToday(new RealDate(`${D}T18:59:59Z`)), D);
+  assert.equal(tashkentToday(new RealDate(`${D}T19:00:00Z`)), D1);
+  // Hafta kuni ham Toshkent sanasi bo'yicha: UTC'da hali kecha bo'lsa ham.
+  const rule = { weekdays: [weekdayOfKey(D1)], dates: [], skipDates: [] };
+  assert.deepEqual(visitDates(rule, tashkentToday(new RealDate(`${D}T20:00:00Z`)), 0, 1), [D1]);
+});
+
+await test('API: UTC da hali kecha, Toshkentda 01:30 — bugungi o‘tgan slotlar yo‘q, ertangilari bor', async () => {
+  const created = await call(adminVisiting, '/api/admin-visiting', withCookie(cookie, post({
+    ...goodDoctor,
+    name: { uz: 'Tungi Shifokor' },
+    weekdays: [0, 1, 2, 3, 4, 5, 6],
+    dates: [],
+    shifts: [{ start: '00:00', end: '02:00' }],
+    slotMinutes: 30,
+  })));
+  nightId = (await created.json()).doctor.id;
+
+  await atTime(`${D}T20:30:00Z`, async () => {
+    const body = await (await call(visitingSlots, `/api/visiting-slots?doctor=${nightId}`)).json();
+    assert.equal(body.days[0].date, D1, 'bugun — Toshkent bo‘yicha');
+    assert.deepEqual(body.days[0].slots, [], 'o‘tgan va 1 soatdan yaqin slotlar ko‘rinmaydi');
+    assert.deepEqual(body.days[1], { date: D2, slots: ['00:00', '00:30', '01:00', '01:30'] });
+
+    const night = (extra) => post({ doctor: nightId, name: 'Tun Bemori', lang: 'uz', ...extra });
+    // UTC bo'yicha "bugun" (D) — Toshkentda allaqachon kecha.
+    assert.equal((await (await call(visitingBook, '/api/visiting-book', night({ date: D, time: '01:00', phone: '90 700 00 01' }))).json()).code, 'bad_slot');
+    assert.equal((await (await call(visitingBook, '/api/visiting-book', night({ date: D1, time: '01:30', phone: '90 700 00 02' }))).json()).code, 'too_soon');
+    const ok = await call(visitingBook, '/api/visiting-book', night({ date: D2, time: '00:00', phone: '90 700 00 03' }));
+    assert.equal(ok.status, 200);
+  });
+
+  const stored = tableOf('test_visiting_bookings').get(`${nightId}#${D2}|00:00`);
+  assert.equal(stored.date, D2, 'kun kaliti Toshkent sanasi');
+  assert.equal(stored.starts_at, `${D1}T19:00:00.000Z`, 'starts_at — haqiqiy UTC lahza');
+  const listed = await (await call(adminBookings, `/api/admin-visiting-bookings?from=${D2}&to=${D2}&doctor=${nightId}`, withCookie(cookie))).json();
+  assert.deepEqual(listed.bookings.map((b) => b.time), ['00:00']);
+});
+
+await test('yarim tunga 1 daqiqa: 00:30 — 31 daqiqa qoldi (yopiq), 01:00 — ochiq', async () => {
+  await atTime(`${D1}T18:59:00Z`, async () => {
+    const body = await (await call(visitingSlots, `/api/visiting-slots?doctor=${nightId}`)).json();
+    assert.equal(body.days[0].date, D1);
+    assert.deepEqual(body.days.find((d) => d.date === D2).slots, ['01:00', '01:30']);
+  });
+});
+
+console.log('\nIkki marta yozilish: atomik shartli yozuv:');
+
+await test('bir slotga 5 ta parallel so‘rov — faqat bittasi o‘tadi', async () => {
+  const D3 = addDaysKey(D, 3);
+  const results = await Promise.all(
+    [1, 2, 3, 4, 5].map((i) =>
+      call(visitingBook, '/api/visiting-book', post({ doctor: nightId, date: D3, time: '00:30', name: `Parallel Bemor`, phone: `91 800 00 0${i}`, lang: 'uz' })),
+    ),
+  );
+  const statuses = results.map((r) => r.status).sort();
+  assert.deepEqual(statuses, [200, 409, 409, 409, 409]);
+  for (const r of results.filter((x) => x.status === 409)) assert.equal((await r.json()).code, 'taken');
+});
+
+await test('bekor qilingan slotni 3 kishi bir vaqtda olmoqchi — faqat bittasi', async () => {
+  const D3 = addDaysKey(D, 3);
+  const listed = await (await call(adminBookings, `/api/admin-visiting-bookings?from=${D3}&to=${D3}&doctor=${nightId}`, withCookie(cookie))).json();
+  const row = listed.bookings.find((b) => b.time === '00:30');
+  assert.equal((await call(adminBookings, '/api/admin-visiting-bookings', withCookie(cookie, post({ ...row, status: 'cancelled' })))).status, 200);
+  const results = await Promise.all(
+    [1, 2, 3].map((i) =>
+      call(visitingBook, '/api/visiting-book', post({ doctor: nightId, date: D3, time: '00:30', name: 'Qayta Bemor', phone: `93 900 00 0${i}`, lang: 'uz' })),
+    ),
+  );
+  assert.deepEqual(results.map((r) => r.status).sort(), [200, 409, 409]);
+});
+
 console.log('\nDeploy tartibi: jadvallar hali yo‘q yoki IAM ruxsat bermaydi:');
 
 for (const errName of ['ResourceNotFoundException', 'AccessDeniedException']) {
