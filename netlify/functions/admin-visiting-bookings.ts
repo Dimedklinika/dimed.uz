@@ -16,6 +16,7 @@ import {
 } from './lib/visiting.ts';
 import { isTime } from './lib/time.ts';
 import { logToAdmin } from './lib/telegram.ts';
+import { isMissingTable, setupProblem } from './lib/aws-errors.ts';
 import { json, error } from './lib/http.ts';
 
 /**
@@ -41,6 +42,11 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     if (request.method === 'POST') return await setStatus((await request.json().catch(() => ({}))) as Record<string, unknown>);
     return error('Faqat GET yoki POST', 405);
   } catch (err) {
+    const setup = setupProblem(err);
+    if (setup) {
+      if (!isMissingTable(err)) await logToAdmin('admin-visiting-bookings', err);
+      return error(setup, 503);
+    }
     await logToAdmin('admin-visiting-bookings', err);
     return error('Yozilganlarni olishda xatolik', 500);
   }

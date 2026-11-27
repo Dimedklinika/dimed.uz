@@ -11,6 +11,7 @@ import {
   type VisitingDoctorRecord,
 } from './lib/visiting.ts';
 import { logToAdmin } from './lib/telegram.ts';
+import { isMissingTable, setupProblem } from './lib/aws-errors.ts';
 import { json, error } from './lib/http.ts';
 
 /**
@@ -46,6 +47,11 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       { 'cache-control': 'no-store' },
     );
   } catch (err) {
+    // Jadvallar hali yo'q / ruxsat yo'q — sayt uchun shifokor "yo'q".
+    if (setupProblem(err)) {
+      if (!isMissingTable(err)) await logToAdmin('visiting-slots', err);
+      return error('Shifokor topilmadi', 404);
+    }
     await logToAdmin('visiting-slots', err);
     return error('Bo‘sh vaqtlarni olishda xatolik', 500);
   }

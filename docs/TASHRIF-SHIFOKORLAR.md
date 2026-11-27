@@ -66,6 +66,12 @@ umuman murojaat qilinmaydi.
 
 ### 3. Deploy
 
+> **Tartib muhim emas.** Kod jadvallardan yoki rasmlarni ko'chirishdan
+> oldin tushsa ham sayt buzilmaydi: bosh sahifadagi bo'lim jim
+> yashirinadi, alohida sahifada «jadval hali e'lon qilinmagan» va telefon
+> chiqadi, rasmlar repodagi standartlari bilan qoladi. Admin panel esa
+> nima yetishmayotganini aniq aytadi.
+
 PR `master` ga qo'shilgach Netlify o'zi yig'adi. `ADMIN_PASSWORD`
 deploy'dan **oldin** qo'shilgan bo'lsin (yoki keyin **Trigger deploy**).
 
@@ -167,5 +173,6 @@ Parolni bitta qurilmadan 15 daqiqada 5 martadan ko'p xato kiritib bo'lmaydi; ham
 | `/admin` da «Panel hali sozlanmagan» | `ADMIN_PASSWORD` yoʻq yoki 12 belgidan qisqa → Netlify'da qo'shing, **Trigger deploy** |
 | Bosh sahifada bo'lim ko'rinmaydi | Saytda ko'rinadigan tashrif shifokori yo'q (yoki hammasi yashirilgan) |
 | Karta bor, «Yozilish» o'chiq | Yaqin 60 kunda kelish kuni yo'q → kunlarni belgilang |
-| Panelda «Saqlashda xatolik» | Jadvallar yaratilmagan (2-qadam) yoki AWS huquqi yangi jadvallarga yetmaydi |
+| Panelda «Jadvallar hali yaratilmagan» | 2-qadam: `npm run create-visiting-tables` |
+| Panelda «AWS ruxsati yetmaydi» | IAM foydalanuvchisiga uchta yangi jadvalni (va `dimed_visiting_bookings/index/*`) qo'shing |
 | Xatolar | Hammasi Telegram log-botga ham boradi (`TELEGRAM_LOG_*`) |

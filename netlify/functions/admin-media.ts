@@ -13,6 +13,7 @@ import {
 } from './lib/media-slots.ts';
 import { purgeTags, TAG_SITE_CONTENT } from './lib/cache.ts';
 import { logToAdmin } from './lib/telegram.ts';
+import { isMissingTable, setupProblem } from './lib/aws-errors.ts';
 import { json, error } from './lib/http.ts';
 
 /**
@@ -40,6 +41,11 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     }
     return error('Faqat GET, POST yoki DELETE', 405);
   } catch (err) {
+    const setup = setupProblem(err);
+    if (setup) {
+      if (!isMissingTable(err)) await logToAdmin('admin-media', err);
+      return error(setup, 503);
+    }
     await logToAdmin('admin-media', err);
     return error('Rasmlar bilan ishlashda xatolik', 500);
   }

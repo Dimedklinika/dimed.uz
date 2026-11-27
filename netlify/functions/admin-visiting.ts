@@ -18,6 +18,7 @@ import {
 import { removeImage } from './lib/media.ts';
 import { purgeTags, TAG_SITE_CONTENT } from './lib/cache.ts';
 import { logToAdmin } from './lib/telegram.ts';
+import { isMissingTable, setupProblem } from './lib/aws-errors.ts';
 import { json, error } from './lib/http.ts';
 
 /**
@@ -48,6 +49,11 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     if (request.method === 'DELETE') return await remove(body);
     return error('Faqat GET, POST, PATCH yoki DELETE', 405);
   } catch (err) {
+    const setup = setupProblem(err);
+    if (setup) {
+      if (!isMissingTable(err)) await logToAdmin('admin-visiting', err);
+      return error(setup, 503);
+    }
     await logToAdmin('admin-visiting', err);
     return error('Saqlashda xatolik', 500);
   }

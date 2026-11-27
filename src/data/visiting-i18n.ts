@@ -51,11 +51,6 @@ const copy = {
     ru: 'Расписание приглашённых специалистов пока не объявлено. Справки по телефону:',
     en: 'No visiting specialist schedule has been announced yet. For details, call:',
   },
-  'v.failed': {
-    uz: 'Maʼlumotni yuklab boʻlmadi.',
-    ru: 'Не удалось загрузить данные.',
-    en: 'Could not load the data.',
-  },
   'v.retry': { uz: 'Qayta urinish', ru: 'Повторить', en: 'Try again' },
   'v.loading': { uz: 'Yuklanmoqda…', ru: 'Загрузка…', en: 'Loading…' },
   'v.min': { uz: 'daqiqa', ru: 'мин', en: 'min' },

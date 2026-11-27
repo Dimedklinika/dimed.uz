@@ -627,6 +627,45 @@ await test('shifokor o‘chiriladi (majburan) — yozuvlar qoladi, rasm o‘chad
   assert.match(body.bookings[0].doctorName, /Karimov Jasur/);
 });
 
+console.log('\nDeploy tartibi: jadvallar hali yo‘q yoki IAM ruxsat bermaydi:');
+
+for (const errName of ['ResourceNotFoundException', 'AccessDeniedException']) {
+  await test(`${errName}: sayt jim (bo‘sh kontent, standart rasm), admin aniq 503`, async () => {
+    const { db } = await lib('db.ts');
+    const original = db.send;
+    db.send = async function (cmd) {
+      if (/visiting|site_media/.test(cmd.input?.TableName ?? '')) {
+        const e = new Error(errName);
+        e.name = errName;
+        throw e;
+      }
+      return original.call(this, cmd);
+    };
+    try {
+      const content = await call(siteContent, '/api/site-content');
+      assert.equal(content.status, 200);
+      assert.deepEqual(await content.json(), { visiting: [], media: {} });
+      assert.match(content.headers.get('netlify-cdn-cache-control'), /max-age=60\b/, 'buzuq holat CDN da qisqa tursin');
+      assert.equal((await call(media, '/media/slot/banner')).headers.get('location'), '/images/og-cover.jpg');
+      assert.equal((await call(visitingSlots, '/api/visiting-slots?doctor=v-abcd1234')).status, 404);
+      const book = await call(visitingBook, '/api/visiting-book', post(booking({ doctor: 'v-abcd1234', phone: '97 111 22 33' })));
+      assert.equal(book.status, 404);
+      assert.equal((await book.json()).code, 'not_found');
+      for (const [fn, path] of [
+        [adminVisiting, '/api/admin-visiting'],
+        [adminBookings, '/api/admin-visiting-bookings'],
+        [adminMedia, '/api/admin-media'],
+      ]) {
+        const res = await call(fn, path, withCookie(cookie));
+        assert.equal(res.status, 503, path);
+        assert.match((await res.json()).error, errName === 'ResourceNotFoundException' ? /create-visiting-tables/ : /IAM/);
+      }
+    } finally {
+      db.send = original;
+    }
+  });
+}
+
 console.log('\nRasmlarni ko‘chirish skripti:');
 
 await test('--dry hech narsa yozmaydi', async () => {

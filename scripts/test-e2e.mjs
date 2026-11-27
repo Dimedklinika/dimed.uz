@@ -780,6 +780,24 @@ await test('tashrif shifokori bo‘lmasa bosh sahifada bo‘lim ko‘rinmaydi', 
   await ctx.close();
 });
 
+await test('API ishlamasa: bosh sahifada bo‘lim yo‘q, sahifada xato emas — neytral matn va telefon', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 800 }, isMobile: true });
+  await mockApi(ctx, { signedIn: false });
+  await ctx.route('**/api/site-content', (r) => r.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"x"}' }));
+  const page = await ctx.newPage();
+  const jsErrors = [];
+  page.on('pageerror', (e) => jsErrors.push(e.message));
+  await page.goto(`${base}/`, { waitUntil: 'networkidle' });
+  assert.equal(await page.isVisible('#tashrif'), false);
+  await page.goto(`${base}/tashrif-shifokorlar`, { waitUntil: 'networkidle' });
+  const text = await page.textContent('[data-v-cards]');
+  assert.match(text, /eʼlon qilinmagan/);
+  assert.doesNotMatch(text, /yuklab boʻlmadi|xato/i);
+  assert.equal(await page.locator('[data-v-cards] a[href^="tel:"]').count(), 1);
+  assert.deepEqual(jsErrors, []);
+  await ctx.close();
+});
+
 await test('/admin: parolsiz panel ochilmaydi, noto‘g‘ri parol xabari', async () => {
   const ctx = await browser.newContext({ viewport: { width: 375, height: 800 }, isMobile: true });
   await ctx.route('**/api/admin-auth', (r) =>

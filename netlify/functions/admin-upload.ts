@@ -2,6 +2,7 @@ import type { Context } from '@netlify/functions';
 import { requireAdmin } from './lib/admin-auth.ts';
 import { IMAGE_PURPOSES, MAX_UPLOAD_BYTES, saveImage, type ImagePurpose } from './lib/media.ts';
 import { logToAdmin } from './lib/telegram.ts';
+import { isMissingTable, setupProblem } from './lib/aws-errors.ts';
 import { json, error } from './lib/http.ts';
 
 /**
@@ -33,6 +34,11 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       { 'cache-control': 'private, no-store' },
     );
   } catch (err) {
+    const setup = setupProblem(err);
+    if (setup) {
+      if (!isMissingTable(err)) await logToAdmin('admin-upload', err);
+      return error(setup, 503);
+    }
     await logToAdmin('admin-upload', err);
     return error('Rasmni saqlashda xatolik', 500);
   }

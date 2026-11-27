@@ -20,6 +20,7 @@ import { isDateKey, isTime, toInstant } from './lib/time.ts';
 import { parsePhone } from './lib/phone.ts';
 import { hitLimit, clientIp } from './lib/rate-limit.ts';
 import { logToAdmin } from './lib/telegram.ts';
+import { isMissingTable, setupProblem } from './lib/aws-errors.ts';
 import { json, error } from './lib/http.ts';
 import { isLang } from '../../src/data/i18n.ts';
 
@@ -166,6 +167,10 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       },
     });
   } catch (err) {
+    if (setupProblem(err)) {
+      if (!isMissingTable(err)) await logToAdmin('visiting-book', err);
+      return fail('not_found', 'Shifokor topilmadi', 404);
+    }
     await logToAdmin('visiting-book', err);
     return fail('server', 'Yozilishda xatolik. Birozdan so‘ng urinib ko‘ring yoki klinikaga qo‘ng‘iroq qiling.', 500);
   }

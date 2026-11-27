@@ -136,21 +136,14 @@ export function initVisiting(): void {
     );
   }
 
-  async function load(force = false): Promise<void> {
-    const content = await loadSiteContent(force);
-    if (!content) {
-      if (variant === 'home') {
-        section!.hidden = true;
-        return;
-      }
-      cards!.innerHTML = `<div class="v-empty glass"><p>${esc(tr('v.failed'))}</p><button class="btn btn-ghost btn-sm" type="button" data-v-retry>${esc(tr('v.retry'))}</button></div>`;
-      cards!.querySelector('[data-v-retry]')?.addEventListener('click', () => {
-        cards!.innerHTML = `<p class="v-empty">${esc(tr('v.loading'))}</p>`;
-        void load(true);
-      });
-      return;
-    }
-    doctors = content.visiting;
+  async function load(): Promise<void> {
+    /*
+      Ma'lumot kelmasa (tarmoq, jadvallar hali yaratilmagan, server xatosi) —
+      xato ko'rsatilmaydi: bosh sahifada bo'lim yashirinadi, alohida sahifada
+      «jadval hali e'lon qilinmagan» va telefon raqami chiqadi.
+    */
+    const content = await loadSiteContent();
+    doctors = content?.visiting ?? [];
     renderCards();
 
     // #v-<id> havolasi bilan kelgan bo'lsa — darhol yozilish oynasi.
