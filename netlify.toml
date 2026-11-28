@@ -14,6 +14,20 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
+# Avvalgi alohida /admin paneli /kabinet/admin ichiga ko'chirildi — eski
+# havolalar va xatcho'plar yangi joyga doimiy (301) yo'naltiriladi.
+[[redirects]]
+  from = "/admin"
+  to = "/kabinet/admin"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/admin/*"
+  to = "/kabinet/admin"
+  status = 301
+  force = true
+
 [[headers]]
   for = "/*"
   [headers.values]
@@ -32,12 +46,6 @@
     # (object, base, form, frame) qat'iy. `blob:` rasmlarda — admin
     # panelda yuklanayotgan rasmni oldindan ko'rsatish uchun.
     Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
-
-# Admin paneli qidiruvga tushmasin (robots.txt dan tashqari, sarlavha bilan ham).
-[[headers]]
-  for = "/admin*"
-  [headers.values]
-    X-Robots-Tag = "noindex, nofollow"
 
 [[headers]]
   for = "/fonts/*"

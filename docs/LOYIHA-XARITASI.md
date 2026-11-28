@@ -147,9 +147,9 @@ Prefiks `dimed_`, region `us-east-1`. To'liq ta'rif —
 | `ratings` | `doctor_id` + `created_at` | — | sayt |
 | `rate_limits` | `bucket` | — (TTL) | sayt |
 | `login_sessions` | `nonce` | — (TTL) | sayt |
-| `visiting_doctors` | `doctor_id` (`v-…`) | — | `/admin` |
-| `visiting_bookings` | `doctor_day` + `time` | `date-index`, `phone-index` | sayt (yozilish), `/admin` (holat) |
-| `site_media` | `slot` | — | `/admin` (rasm havolasi; fayl o'zi Netlify Blobs'da) |
+| `visiting_doctors` | `doctor_id` (`v-…`) | — | admin |
+| `visiting_bookings` | `doctor_day` + `time` | `date-index`, `phone-index` | sayt (yozilish), admin (holat) |
+| `site_media` | `slot` | — | admin (rasm havolasi; fayl o'zi Netlify Blobs'da) |
 
 `prices` jadvalida ikki xil yozuv: `item_id="analysis#<kod>"` — tahlil
 narxlari; `item_id="reference#<nom>#<jins>"`, `kind="reference"` —
@@ -230,11 +230,16 @@ Manzil `/api/<fayl nomi>` (redirect `netlify.toml` da).
 | `admin-references.ts` | Ko'rsatkichlar me'yoriy (referens) oraliqlari (F4) |
 | `admin-ratings.ts` | Bemor baholari, yashirish |
 
-### `/admin` paneli (parol — `ADMIN_PASSWORD`, cookie `dimed_admin`)
+### Admin — tashrif shifokorlari va rasmlar (`/kabinet/admin` ichida)
+
+Kirish boshqa admin endpointlari bilan bir xil: Telegram sessiyasi
+(`dimed_session`) + `ADMIN_TELEGRAM_IDS`, `lib/admin-auth.ts` →
+`requireAdmin` (401 / 403 + Telegram ID, o'zgartiruvchi so'rovlarda CSRF
+tekshiruvi). Eski alohida `/admin` paneli (parol bilan) olib tashlangan,
+manzil `/kabinet/admin` ga 301.
 
 | Fayl | Nima qiladi |
 | --- | --- |
-| `admin-auth.ts` | Kirish / chiqish, IP bo'yicha urinish cheklovi |
 | `admin-visiting.ts` | Tashrif shifokorlari: qo'shish, tahrirlash, yashirish, o'chirish |
 | `admin-visiting-bookings.ts` | Yozilganlar (sana oralig'i, shifokor), holat |
 | `admin-upload.ts` | Rasm yuklash → siqish → Blobs |
@@ -284,7 +289,7 @@ da — alohida ro'yxat yo'q.
 | `telegram.ts` | Bot API: xabar, tugma, log-botga xato |
 | `i18n.ts` | Bot matnlari uch tilda |
 | `payment.ts` | Payme adapteri |
-| `admin-auth.ts` | `/admin` paroli, imzolangan cookie, CSRF tekshiruvi |
+| `admin-auth.ts` | Tashrif/rasm admin API'lari uchun `requireAdmin` (sessiya, ADMIN_TELEGRAM_IDS, CSRF) |
 | `visiting.ts` | Tashrif shifokorlari: kelish kunlari, bo'sh vaqt, admin kiritganini tekshirish |
 | `media.ts` | Netlify Blobs ombori, rasmni siqish (sharp → WebP; banner — JPEG 1200×630) |
 | `media-slots.ts` | Almashtiriladigan rasm o'rinlari (banner, galereya, `doctor-<id>`) |
@@ -313,7 +318,10 @@ da — alohida ro'yxat yo'q.
 | `/kabinet/admin/baholar` | `.../baholar.astro` | Baholar |
 | `/maxfiylik` | `maxfiylik.astro` | Maxfiylik siyosati |
 | `/tashrif-shifokorlar` (+ ru/en) | `[...lang]/tashrif-shifokorlar.astro` | Tashrif shifokorlari, yozilish |
-| `/admin` | `admin.astro` | Parol bilan kiriladigan panel (shifokorlar, yozilganlar, rasmlar) |
+| `/kabinet/admin/tashrif` | `kabinet/admin/tashrif.astro` | Tashrif shifokorlari (uch tilda, rasm) |
+| `/kabinet/admin/tashrif-yozuvlar` | `.../tashrif-yozuvlar.astro` | Tashrif shifokorlariga yozilganlar, holat |
+| `/kabinet/admin/rasmlar` | `.../rasmlar.astro` | Banner, galereya, shifokor rasmlari |
+| `/admin` | — | `netlify.toml`: 301 → `/kabinet/admin` |
 | 404 | `404.astro` | Topilmadi sahifasi |
 | `/sitemap.xml`, `/robots.txt` | `*.ts` | Yig'ilishda hosil bo'ladi |
 
@@ -355,7 +363,7 @@ ta'riflarining **yagona manbasi**.
 | `test-panels.mjs` | Tahlil nomini tanish (bazadagi haqiqiy ma'lumot bo'yicha) |
 | `test-tables.mjs` | Jadval ta'riflari + `cloudshell-setup.sh` mosligi |
 | `test-phone.mjs` | Telefon normallashtirish |
-| `test-visiting.mjs` | Tashrif shifokorlari, `/admin` API, rasmlar, ko'chirish skripti |
+| `test-visiting.mjs` | Tashrif shifokorlari, ularning admin API'lari, rasmlar, ko'chirish skripti |
 | `test-e2e.mjs` | Brauzer (Playwright): bron vidjeti, yopiq sahifalar, tashrif shifokoriga yozilish |
 
 `scripts/fake-dynamo.mjs` — **xotiradagi soxta DynamoDB**. Testlar

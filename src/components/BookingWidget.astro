@@ -362,7 +362,7 @@ const widgetData = JSON.stringify({ departments, doctors });
         }),
       );
       wBody.querySelector('.back-link').addEventListener('click', () => setStep(1));
-      // Admin panelda almashtirilgan shifokor rasmi (/admin → Rasmlar).
+      // Admin panelda almashtirilgan shifokor rasmi (/kabinet/admin/rasmlar).
       void applyMediaOverrides(wBody);
     } else if (state.step === 3) {
       renderDatesAndSlots();

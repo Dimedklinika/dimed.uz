@@ -1,0 +1,733 @@
+/*
+  /kabinet/admin — Tashrif shifokorlari, Tashrif yozuvlari, Rasmlar.
+
+  Uslub boshqa admin sahifalaridan (Shifokorlar, Navbatlar) olingan:
+  shisha kartochka, kichik bosh harfli sarlavha, `.mini` tugmalar,
+  `.rows` qatorlar, `.modal` oyna va `.fld` maydonlar. Ro'yxatlar JS bilan
+  chiziladi, shuning uchun uslub global — lekin faqat `.vadm` ichida, va
+  faqat shu uch sahifaga ulanadi.
+*/
+
+/* Sarlavha ostidagi qisqa holat (Cabinet `sub` slotida — .vadm dan tashqarida). */
+.vadm-sub {
+  display: block;
+  color: var(--rose);
+  font-weight: 650;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.vadm .state {
+  text-align: center;
+  padding: 48px 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.vadm .card {
+  border-radius: 16px;
+  padding: var(--card-pad);
+  margin-bottom: 16px;
+}
+
+.vadm .card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.vadm .card h2 {
+  font-size: 12px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  font-family: var(--font-sans);
+}
+
+.vadm .hint {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.vadm .empty {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 8px 0;
+}
+
+.vadm .filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vadm .filters select,
+.vadm .filters input[type='date'] {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 13.5px;
+  min-width: 0;
+}
+
+.vadm .dash {
+  color: var(--muted);
+}
+
+.vadm .mini {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vadm .mini:hover {
+  border-color: var(--leaf);
+}
+
+.vadm .mini.on {
+  border-color: var(--leaf);
+  color: var(--leaf);
+}
+
+.vadm .mini.danger {
+  color: var(--rose);
+}
+
+.vadm .mini.danger:hover {
+  border-color: var(--rose);
+  background: var(--rose-soft);
+}
+
+.vadm .mini.okbtn {
+  color: var(--leaf);
+}
+
+.vadm .mini:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.vadm .msg {
+  min-height: 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.vadm .msg.error {
+  color: var(--rose);
+}
+
+.vadm .msg.ok {
+  color: var(--leaf);
+}
+
+.vadm .tag {
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.vadm .tag.ok {
+  color: var(--ok);
+  background: var(--ok-bg);
+}
+
+.vadm .tag.warn {
+  color: var(--warn);
+  background: var(--warn-bg);
+}
+
+.vadm .tag.off {
+  color: var(--muted);
+  background: var(--busy);
+}
+
+/* ---- qatorlar ---- */
+.vadm .rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vadm .row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+
+.vadm .row.off {
+  opacity: 0.55;
+}
+
+.vadm .row-main {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vadm .row-main .nm {
+  font-weight: 700;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.vadm .row-main .meta {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.vadm .row-tags,
+.vadm .row-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vadm .ph {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: var(--rose-soft);
+  color: var(--rose);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+/* Yozuvlar: vaqt | bemor | shifokor | holat */
+.vadm .bk-time {
+  width: 64px;
+  font-weight: 700;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vadm .bk-time small {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.vadm .bk-who a {
+  color: var(--rose);
+  font-weight: 650;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vadm .row select {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.vadm .row[data-status='came'] select {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.vadm .row[data-status='no_show'] select {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.vadm .row[data-status='cancelled'] {
+  opacity: 0.6;
+}
+
+.vadm .row[data-status='cancelled'] .nm {
+  text-decoration: line-through;
+}
+
+.vadm .day-sep {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .vadm .row select {
+    width: 100%;
+  }
+}
+
+/* ---- statistika chiplari (Navbatlar sahifasidagi kabi) ---- */
+.vadm .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.vadm .chip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 16px;
+  min-width: 96px;
+  background: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.vadm .chip b {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.vadm .chip small {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.vadm .chip.on {
+  border-color: var(--leaf);
+}
+
+.vadm .chip.ok b {
+  color: var(--leaf);
+}
+
+.vadm .chip.bad b {
+  color: var(--rose);
+}
+
+.vadm .chip.money {
+  cursor: default;
+  min-width: 160px;
+}
+
+.vadm .chip.money b {
+  font-size: 16px;
+  color: var(--leaf);
+}
+
+/* ---- rasmlar ---- */
+.vadm .mgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.vadm .mcard {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.vadm .mimg {
+  aspect-ratio: 16 / 10;
+  background: var(--busy);
+}
+
+.vadm .mcard.doctor .mimg {
+  aspect-ratio: 1 / 1;
+}
+
+.vadm .mimg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vadm .mbody {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.vadm .mbody .nm {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.vadm .mbody .row-btns {
+  margin-top: auto;
+}
+
+.vadm .file {
+  position: relative;
+  overflow: hidden;
+}
+
+.vadm .file input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.vadm .file:focus-within {
+  outline: 2px solid var(--leaf);
+  outline-offset: 2px;
+}
+
+/* ---- oyna (Shifokorlar sahifasidagi kabi) ---- */
+.vadm .modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+  z-index: 50;
+}
+
+.vadm .modal[hidden] {
+  display: none;
+}
+
+.vadm .modal-card {
+  border-radius: 18px;
+  padding: 24px;
+  width: 100%;
+  max-width: 600px;
+  background: var(--card-solid);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  --chip-bg: var(--bg);
+  --card-brd: var(--line);
+}
+
+.vadm .modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.vadm .modal-head h2 {
+  font-size: 18px;
+  font-weight: 750;
+}
+
+.vadm .x {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+
+.vadm .x:hover {
+  color: var(--rose);
+  background: var(--rose-soft);
+}
+
+.vadm .form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.vadm .two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 520px) {
+  .vadm .two {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vadm .fld {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vadm .fld > span,
+.vadm .fld-label {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.vadm .fld input,
+.vadm .fld select,
+.vadm .fld textarea,
+.vadm .addrow input,
+.vadm .shift input {
+  border: 1px solid var(--card-brd);
+  background: var(--chip-bg);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 14px;
+  min-width: 0;
+}
+
+.vadm .fld textarea {
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.5;
+}
+
+.vadm .fld input:focus,
+.vadm .fld select:focus,
+.vadm .fld textarea:focus,
+.vadm .addrow input:focus,
+.vadm .shift input:focus {
+  border-color: var(--leaf);
+  outline: none;
+}
+
+.vadm .fld-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.vadm .seg {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vadm .seg button {
+  flex: 1;
+  border: 1px solid var(--card-brd);
+  background: var(--chip-bg);
+  border-radius: 10px;
+  padding: 8px 4px;
+  font-size: 13px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  min-width: 64px;
+}
+
+.vadm .seg button.on {
+  background: var(--leaf);
+  border-color: var(--leaf);
+  color: #fff;
+}
+
+.vadm .seg .dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.vadm .seg .dot.filled {
+  background: var(--ok);
+}
+
+.vadm .seg button.on .dot.filled {
+  background: #fff;
+}
+
+.vadm .days {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vadm .day {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 1px solid var(--card-brd);
+  background: var(--chip-bg);
+  border-radius: 9px;
+  padding: 8px;
+  cursor: pointer;
+}
+
+.vadm .day input,
+.vadm .chk input {
+  accent-color: var(--leaf);
+}
+
+.vadm .chk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.vadm .chk input {
+  width: 17px;
+  height: 17px;
+}
+
+.vadm .chk small {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.vadm .shift {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.vadm .shift input {
+  padding: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vadm .del {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 14px;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.vadm .del:hover {
+  color: var(--rose);
+  background: var(--rose-soft);
+}
+
+.vadm .add {
+  border: 1.5px dashed var(--line);
+  background: none;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--muted);
+  align-self: flex-start;
+}
+
+.vadm .add:hover {
+  border-color: var(--leaf);
+  color: var(--leaf);
+}
+
+.vadm .dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.vadm .dates:empty::before {
+  content: 'yoʻq';
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.vadm .datechip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 1px solid var(--card-brd);
+  border-radius: 999px;
+  padding: 2px 2px 2px 10px;
+  background: var(--chip-bg);
+}
+
+.vadm .datechip.past {
+  opacity: 0.5;
+}
+
+.vadm .addrow {
+  display: flex;
+  gap: 8px;
+}
+
+.vadm .photo {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.vadm .photo-prev {
+  width: 88px;
+  height: 88px;
+  border-radius: 16px;
+  border: 1.5px dashed var(--line);
+  background: var(--chip-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.vadm .photo-prev img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vadm .photo-act {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.vadm .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

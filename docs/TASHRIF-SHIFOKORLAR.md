@@ -1,4 +1,4 @@
-# Tashrif buyuruvchi shifokorlar va `/admin` paneli
+# Tashrif buyuruvchi shifokorlar va sayt rasmlari (admin)
 
 > **Kim uchun:** klinika egasi va administrator.
 > Texnik tafsilotlar (jadvallar, endpointlar) — `LOYIHA-XARITASI.md`.
@@ -19,11 +19,13 @@
      vaqtni bir zumda tanlasa ham faqat bittasi yoziladi;
    - Telegram shart emas — faqat sayt.
 
-2. **`/admin` paneli** (parol bilan): tashrif shifokorlari, yozilganlar
-   ro'yxati va saytdagi rasmlar.
+2. **Admin bo'limlari** — `/kabinet/admin` ichida, boshqa admin
+   bo'limlari bilan bir joyda va bir xil kirish bilan: «Tashrif
+   shifokorlari», «Tashrif yozuvlari», «Rasmlar». (Avvalgi alohida
+   `/admin` paneli olib tashlandi, eski manzil shu yerga yo'naltiriladi.)
 
 3. **Rasmlar koddan chiqarildi.** Banner, galereya va shifokorlar rasmini
-   endi `/admin → Rasmlar` dan almashtirasiz — GitHub ham, dasturchi ham
+   endi `/kabinet/admin` → «Rasmlar» dan almashtirasiz — GitHub ham, dasturchi ham
    kerak emas. Rasm yuklanganda avtomatik kichraytiriladi va WebP
    qilinadi, fayl Netlify Blobs'da, bazada faqat havola.
 
@@ -32,17 +34,12 @@ o'zgarmadi.
 
 ## Ishga tushirish (bir marta, ~15 daqiqa)
 
-### 1. Netlify'da muhit o'zgaruvchisi
+### 1. Kim kira oladi
 
-Netlify → **Site configuration → Environment variables → Add a variable**:
-
-| Nom | Qiymat |
-| --- | --- |
-| `ADMIN_PASSWORD` | Panel paroli: kamida 12 belgi, uzun va tasodifiy (masalan 4 ta so‘z + raqam) |
-
-Boshqa yangi kalit kerak emas: Netlify Blobs va kesh tozalash Netlify
-ichida o'zi ishlaydi. Mavjud `SESSION_SECRET` va `DIMED_AWS_*` kerak
-(ular allaqachon bor).
+Yangi kalit kerak emas. Admin bo'limlariga `ADMIN_TELEGRAM_IDS` dagi
+Telegram hisoblar kiradi (boshqa admin sahifalari kabi). Netlify Blobs va
+kesh tozalash Netlify ichida o'zi ishlaydi. Avvalgi `ADMIN_PASSWORD`
+endi ishlatilmaydi — Netlify'dan o'chirib qo'yish mumkin.
 
 ### 2. Yangi jadvallar (DynamoDB)
 
@@ -87,8 +84,7 @@ ishlatilmaydi.
 > chiqadi, rasmlar repodagi standartlari bilan qoladi. Admin panel esa
 > nima yetishmayotganini aniq aytadi.
 
-PR `master` ga qo'shilgach Netlify o'zi yig'adi. `ADMIN_PASSWORD`
-deploy'dan **oldin** qo'shilgan bo'lsin (yoki keyin **Trigger deploy**).
+PR `master` ga qo'shilgach Netlify o'zi yig'adi.
 
 ### 4. Hozirgi rasmlarni ko'chirish
 
@@ -110,13 +106,17 @@ uni o'chirib qo'yish mumkin.
 
 ### 5. Shifokorlarni qo'shish
 
-`https://dimed.uz/admin` → parol → **+ Yangi shifokor** → travmatolog va
-endokrinologni kiriting (pastda batafsil).
+`dimed.uz/kabinet/admin` → «Tashrif shifokorlari» → **+ Yangi shifokor** →
+travmatolog va endokrinologni kiriting (pastda batafsil).
 
 ## Admin paneldan foydalanish
 
-Manzil: **`dimed.uz/admin`**. Sessiya 12 soat; «Chiqish» tugmasi bor.
-Parolni bitta qurilmadan 15 daqiqada 5 martadan ko'p xato kiritib bo'lmaydi; hamma joydan jami soatiga 100 ta xato bo'lsa, kirish soat oxirigacha yopiladi (ochiq sessiyalar ishlayveradi, log-botga xabar keladi).
+Manzil: **`dimed.uz/kabinet/admin`** — tablar: «Tashrif shifokorlari»,
+«Tashrif yozuvlari», «Rasmlar» (boshqa admin tablari yonida; header'dagi
+Kabinet menyusida ham). Kirish — Telegram orqali, boshqa admin sahifalari
+bilan bir xil: bot yuborgan kod (bitta kodga 5 urinish, raqam va IP
+bo'yicha soatlik cheklov), keyin `ADMIN_TELEGRAM_IDS` ro'yxati tekshiriladi.
+Ro'yxatda yo'q odamga «huquq yo'q» va uning Telegram ID si ko'rsatiladi.
 
 ### Tashrif shifokorlari
 
@@ -185,7 +185,7 @@ Parolni bitta qurilmadan 15 daqiqada 5 martadan ko'p xato kiritib bo'lmaydi; ham
 
 | Belgi | Sabab va yechim |
 | --- | --- |
-| `/admin` da «Panel hali sozlanmagan» | `ADMIN_PASSWORD` yoʻq yoki 12 belgidan qisqa → Netlify'da qo'shing, **Trigger deploy** |
+| Admin bo'limida «huquq yo'q» va Telegram ID | Shu ID ni Netlify'da `ADMIN_TELEGRAM_IDS` ga qo'shing, **Trigger deploy** |
 | Bosh sahifada bo'lim ko'rinmaydi | Saytda ko'rinadigan tashrif shifokori yo'q (yoki hammasi yashirilgan) |
 | Karta bor, «Yozilish» o'chiq | Yaqin 60 kunda kelish kuni yo'q → kunlarni belgilang |
 | Panelda «Jadvallar hali yaratilmagan» | 2-qadam: `npm run create-visiting-tables` |

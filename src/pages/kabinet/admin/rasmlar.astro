@@ -1,0 +1,42 @@
+---
+import Cabinet from '../../../layouts/Cabinet.astro';
+import SignInCard from '../../../components/SignInCard.astro';
+import { t } from '../../../data/i18n';
+import '../../../styles/admin-kabinet.css';
+
+/*
+  Admin — saytdagi rasmlar: banner (og:image), galereya va asosiy
+  shifokorlar rasmi. Kod o'zgartirmasdan almashtiriladi: rasm siqilib
+  (WebP) Netlify Blobs'ga yuklanadi, bazada faqat havola.
+*/
+---
+
+<Cabinet
+  title="Sayt rasmlari — Admin"
+  description="Banner, galereya va shifokorlar rasmini almashtirish."
+  eyebrow="Administrator"
+  heading="Sayt rasmlari"
+  area="admin"
+  active="rasmlar"
+>
+  <span class="sub vadm-sub" id="subtitle" slot="sub"></span>
+
+  <div class="vadm">
+    <div id="loading" class="state">Yuklanmoqda…</div>
+
+    <SignInCard what={t('signin.what.admin')} whatKey="signin.what.admin" next="/kabinet/admin/rasmlar" id="denied" hidden />
+
+    <div id="content" hidden>
+      <p class="hint" style="margin-bottom:16px">
+        Yuklangan rasm avtomatik kichraytiriladi va WebP qilinadi (banner — JPEG 1200×630), bir necha soniyada saytda
+        koʻrinadi. Tashrif shifokorlari rasmi — «Tashrif shifokorlari» boʻlimida.
+      </p>
+      <div id="groups"></div>
+    </div>
+  </div>
+</Cabinet>
+
+<script>
+  import { initMediaAdmin } from '../../../lib/admin-visiting';
+  initMediaAdmin();
+</script>

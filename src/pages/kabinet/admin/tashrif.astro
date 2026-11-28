@@ -1,0 +1,173 @@
+---
+import Cabinet from '../../../layouts/Cabinet.astro';
+import SignInCard from '../../../components/SignInCard.astro';
+import { t } from '../../../data/i18n';
+import '../../../styles/admin-kabinet.css';
+
+/*
+  Admin — Tashrif buyuruvchi shifokorlar: klinikaga ma'lum kunlarda
+  tashqaridan keladigan shifokorlar (sayt: bosh sahifa va
+  /tashrif-shifokorlar). Matnlar uch tilda, rasm Netlify Blobs'ga
+  yuklanadi. Kirish — boshqa admin sahifalaridagi kabi (Telegram).
+*/
+const weekdays = [
+  { n: 1, label: 'Du' },
+  { n: 2, label: 'Se' },
+  { n: 3, label: 'Chor' },
+  { n: 4, label: 'Pay' },
+  { n: 5, label: 'Ju' },
+  { n: 6, label: 'Sh' },
+  { n: 0, label: 'Yak' },
+];
+const slotOptions = [10, 15, 20, 30, 40, 45, 60, 90];
+const langs = [
+  { code: 'uz', label: 'Oʻzbekcha' },
+  { code: 'ru', label: 'Русский' },
+  { code: 'en', label: 'English' },
+];
+---
+
+<Cabinet
+  title="Tashrif shifokorlari — Admin"
+  description="Klinikaga maʼlum kunlarda keladigan shifokorlar: qoʻshish, tahrirlash, yashirish."
+  eyebrow="Administrator"
+  heading="Tashrif buyuruvchi shifokorlar"
+  area="admin"
+  active="tashrif"
+>
+  <span class="sub vadm-sub" id="subtitle" slot="sub"></span>
+  <button class="btn btn-sm" id="addBtn" slot="actions" hidden>+ Yangi shifokor</button>
+
+  <div class="vadm">
+    <div id="loading" class="state">Yuklanmoqda…</div>
+
+    <SignInCard what={t('signin.what.admin')} whatKey="signin.what.admin" next="/kabinet/admin/tashrif" id="denied" hidden />
+
+    <div id="content" hidden>
+      <div class="card glass">
+        <div class="card-head">
+          <h2>Saytdagi kartochkalar</h2>
+          <span class="hint">Saqlangan zahoti bosh sahifada va «Tashrif shifokorlari» sahifasida koʻrinadi.</span>
+        </div>
+        <p class="empty" id="empty" hidden>
+          Hali shifokor qoʻshilmagan. «+ Yangi shifokor» tugmasini bosing — masalan travmatolog va endokrinolog.
+        </p>
+        <div class="rows" id="list"></div>
+      </div>
+    </div>
+
+    <div id="modal" class="modal" hidden>
+      <div class="modal-card card glass">
+        <div class="modal-head">
+          <h2 id="formTitle">Yangi tashrif shifokori</h2>
+          <button class="x" id="closeForm" type="button" aria-label="Yopish">✕</button>
+        </div>
+
+        <div class="form">
+          <div class="photo">
+            <div class="photo-prev" id="f-photo-prev">Rasm yoʻq</div>
+            <div class="photo-act">
+              <label class="mini file">Rasm tanlash<input type="file" id="f-photo-file" accept="image/jpeg,image/png,image/webp,image/*" /></label>
+              <button class="add" id="f-photo-remove" type="button" hidden>Rasmni olib tashlash</button>
+              <small class="fld-note" id="f-photo-msg"></small>
+            </div>
+          </div>
+
+          <div class="fld">
+            <span>Matnlar (uch tilda; ru/en boʻsh qolsa saytda oʻzbekchasi chiqadi)</span>
+            <div class="seg" id="f-langs">
+              {langs.map((l, i) => (
+                <button type="button" class:list={[{ on: i === 0 }]} data-lang={l.code}>
+                  {l.label}<i class="dot" data-dot={l.code} />
+                </button>
+              ))}
+            </div>
+          </div>
+          {
+            langs.map((l, i) => (
+              <div class="form" data-pane={l.code} hidden={i !== 0}>
+                <div class="two">
+                  <label class="fld">
+                    <span>Ism-familiya{l.code === 'uz' ? ' *' : ''}</span>
+                    <input type="text" maxlength="80" data-f={`name.${l.code}`} />
+                  </label>
+                  <label class="fld">
+                    <span>Mutaxassislik{l.code === 'uz' ? ' *' : ''}</span>
+                    <input type="text" maxlength="80" data-f={`specialty.${l.code}`} placeholder={l.code === 'uz' ? 'Travmatolog' : l.code === 'ru' ? 'Травматолог' : 'Traumatologist'} />
+                  </label>
+                </div>
+                <label class="fld">
+                  <span>Qisqa maʼlumot</span>
+                  <textarea rows="3" maxlength="600" data-f={`bio.${l.code}`} placeholder="Tajriba, qayerdan keladi, nimalarni davolaydi" />
+                </label>
+              </div>
+            ))
+          }
+
+          <div class="fld">
+            <span>Har hafta keladigan kunlar</span>
+            <div class="days" id="f-days">
+              {weekdays.map((w) => (
+                <label class="day"><input type="checkbox" value={w.n} />{w.label}</label>
+              ))}
+            </div>
+          </div>
+
+          <div class="two">
+            <div class="fld">
+              <span>Alohida sanalar</span>
+              <div class="dates" id="f-dates"></div>
+              <div class="addrow">
+                <input type="date" id="f-date-in" aria-label="Sana" />
+                <button class="mini" type="button" id="f-date-add">Qoʻshish</button>
+              </div>
+            </div>
+            <div class="fld">
+              <span>Kelmaydigan sanalar</span>
+              <div class="dates" id="f-skip"></div>
+              <div class="addrow">
+                <input type="date" id="f-skip-in" aria-label="Sana" />
+                <button class="mini" type="button" id="f-skip-add">Qoʻshish</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="fld">
+            <span>Qabul soatlari (tanaffus — oraliqlar orasidagi boʻshliq)</span>
+            <div id="f-shifts"></div>
+            <button class="add" id="addShift" type="button">+ oraliq qoʻshish</button>
+          </div>
+
+          <div class="fld">
+            <span>Bitta qabul davomiyligi</span>
+            <div class="seg" id="f-slot">
+              {slotOptions.map((m) => <button type="button" data-min={m}>{m} daq</button>)}
+            </div>
+          </div>
+
+          <div class="two">
+            <label class="fld"><span>Qabul narxi (soʻm) *</span><input id="f-price" type="number" min="0" step="1000" inputmode="numeric" /></label>
+            <label class="fld"><span>Tartib raqami</span><input id="f-sort" type="number" step="1" inputmode="numeric" placeholder="0" /></label>
+          </div>
+          <small class="fld-note">Narx saytda koʻrsatiladi va klinika kassasida olinadi. Kichik tartib raqamli karta oldinda.</small>
+
+          <label class="chk">
+            <input id="f-active" type="checkbox" checked />
+            <span>Saytda koʻrinsin<small>Belgi olib tashlansa karta yashiriladi va yozilib boʻlmaydi.</small></span>
+          </label>
+
+          <p class="msg" id="formMsg" role="status" aria-live="polite"></p>
+          <div class="modal-actions">
+            <button class="mini" id="cancelForm" type="button">Bekor qilish</button>
+            <button class="btn btn-sm" id="saveForm" type="button">Saqlash</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</Cabinet>
+
+<script>
+  import { initVisitingDoctorsAdmin } from '../../../lib/admin-visiting';
+  initVisitingDoctorsAdmin();
+</script>

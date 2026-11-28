@@ -1,5 +1,5 @@
 /**
- * Tashrif buyuruvchi shifokorlar, /admin paneli va rasmlar — API testlari.
+ * Tashrif buyuruvchi shifokorlar, ularning admin API lari (/kabinet/admin) va rasmlar — API testlari.
  *
  * `test-api.mjs` kabi: soxta DynamoDB (`fake-dynamo.mjs`) va xotiradagi
  * rasm ombori (`DIMED_MEDIA_MEMORY=1`) — AWS ham, Netlify ham kerak emas.
@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const fnDir = join(root, 'netlify', 'functions');
@@ -20,7 +20,7 @@ process.env.DIMED_AWS_REGION = 'eu-central-1';
 process.env.AWS_ACCESS_KEY_ID = 'test';
 process.env.AWS_SECRET_ACCESS_KEY = 'test';
 process.env.TELEGRAM_BOT_TOKEN = 'test-bot-token';
-process.env.ADMIN_PASSWORD = 'juda-maxfiy-parol';
+process.env.ADMIN_TELEGRAM_IDS = '424242';
 process.env.DIMED_MEDIA_MEMORY = '1';
 
 const { startFakeDynamo, stopFakeDynamo, seed, tableOf } = await import('./fake-dynamo.mjs');
@@ -40,7 +40,6 @@ const siteContent = await load('site-content.ts');
 const visitingSlots = await load('visiting-slots.ts');
 const visitingBook = await load('visiting-book.ts');
 const media = await load('media.ts');
-const adminAuth = await load('admin-auth.ts');
 const adminVisiting = await load('admin-visiting.ts');
 const adminBookings = await load('admin-visiting-bookings.ts');
 const adminUpload = await load('admin-upload.ts');
@@ -51,7 +50,8 @@ const { tashkentToday, addDaysKey, weekdayOfKey, visitDates, textOf, checkPatien
 );
 const { parseDoctorInput, freeTimes } = await lib('visiting.ts');
 const { sniffFormat, readDimensions, processImage, isMediaKey, keyFromUrl } = await lib('media.ts');
-const { checkPassword, hasAdminSession, sameOrigin } = await lib('admin-auth.ts');
+const { sameOrigin } = await lib('admin-auth.ts');
+const { createSessionCookie } = await lib('session.ts');
 
 const ctx = {};
 const BASE = 'https://dimed.uz';
@@ -190,123 +190,76 @@ await test('rasm kaliti va manzili', () => {
   assert.equal(keyFromUrl('/media/u/2026-11/../../x.webp'), null);
 });
 
-console.log('\nAdmin kirish:');
+console.log('\nAdmin kirish (/kabinet/admin — Telegram sessiyasi):');
 
-let cookie = '';
+/*
+  Bo'limlar /kabinet/admin ichida: kirish boshqa admin sahifalaridagi kabi —
+  Telegram OTP (auth-verify: kodga 5 urinish, raqam/IP soatlik cheklovi;
+  test-api.mjs tekshiradi), imzolangan HttpOnly `dimed_session` va
+  ADMIN_TELEGRAM_IDS.
+*/
+const cookie = createSessionCookie({ phone: '+998900424242', userId: '424242' }).split(';')[0];
+const patientCookie = createSessionCookie({ phone: '+998901112233', userId: '777' }).split(';')[0];
 
-await test('parolsiz admin API yopiq (401)', async () => {
-  const res = await call(adminVisiting, '/api/admin-visiting');
-  assert.equal(res.status, 401);
+await test('sessiya cookie: HttpOnly, Secure, SameSite, imzolangan', () => {
+  const full = createSessionCookie({ phone: '+998900424242', userId: '424242' });
+  assert.match(full, /HttpOnly/);
+  assert.match(full, /Secure/);
+  assert.match(full, /SameSite=Lax/);
+  assert.match(cookie, /^dimed_session=[^.]+\.[A-Za-z0-9_-]+$/);
 });
 
-await test('noto‘g‘ri parol rad etiladi', async () => {
-  const res = await call(adminAuth, '/api/admin-auth', post({ password: 'xato' }));
-  assert.equal(res.status, 401);
-  assert.equal(checkPassword('juda-maxfiy-parol'), true);
-  assert.equal(checkPassword('juda-maxfiy-paro'), false);
+await test('kirmagan — 401', async () => {
+  assert.equal((await call(adminVisiting, '/api/admin-visiting')).status, 401);
 });
 
-await test('to‘g‘ri parol — HttpOnly, SameSite=Strict cookie', async () => {
-  const res = await call(adminAuth, '/api/admin-auth', post({ password: 'juda-maxfiy-parol' }));
-  assert.equal(res.status, 200);
-  const setCookie = res.headers.get('set-cookie');
-  assert.match(setCookie, /dimed_admin=/);
-  assert.match(setCookie, /HttpOnly/);
-  assert.match(setCookie, /SameSite=Strict/);
-  cookie = setCookie.split(';')[0];
-  const status = await (await call(adminAuth, '/api/admin-auth', withCookie(cookie))).json();
-  assert.equal(status.ok, true);
+await test('kirgan, lekin admin emas (bemor) — 403 va Telegram ID', async () => {
+  const res = await call(adminVisiting, '/api/admin-visiting', withCookie(patientCookie));
+  assert.equal(res.status, 403);
+  assert.equal((await res.json()).telegramId, '777');
 });
 
-await test('soxta yoki eskirgan cookie o‘tmaydi', async () => {
-  const forged = cookie.slice(0, -3) + 'abc';
-  assert.equal(hasAdminSession(new Request(BASE, { headers: { cookie: forged } })), false);
-  const payload = Buffer.from(JSON.stringify({ exp: 1, n: 'x' })).toString('base64url');
-  assert.equal(hasAdminSession(new Request(BASE, { headers: { cookie: `dimed_admin=${payload}.xyz` } })), false);
+await test('admin (ADMIN_TELEGRAM_IDS) — 200', async () => {
+  assert.equal((await call(adminVisiting, '/api/admin-visiting', withCookie(cookie))).status, 200);
 });
 
-await test('parol almashtirilsa eski sessiya yaroqsiz', async () => {
-  process.env.ADMIN_PASSWORD = 'yangi-parol-12345';
-  assert.equal(hasAdminSession(new Request(BASE, { headers: { cookie } })), false);
-  process.env.ADMIN_PASSWORD = 'juda-maxfiy-parol';
-  assert.equal(hasAdminSession(new Request(BASE, { headers: { cookie } })), true);
+await test('ADMIN_TELEGRAM_IDS bo‘sh bo‘lsa hech kim admin emas', async () => {
+  const saved = process.env.ADMIN_TELEGRAM_IDS;
+  process.env.ADMIN_TELEGRAM_IDS = '';
+  try {
+    assert.equal((await call(adminVisiting, '/api/admin-visiting', withCookie(cookie))).status, 403);
+  } finally {
+    process.env.ADMIN_TELEGRAM_IDS = saved;
+  }
 });
 
-await test('begona saytdan so‘rov (CSRF) rad etiladi', async () => {
+await test('soxta yoki imzosi buzilgan sessiya — 401', async () => {
+  const forged = 'dimed_session=' + Buffer.from(JSON.stringify({ phone: '+998900424242', userId: '424242', exp: 9999999999 })).toString('base64url') + '.AAAA';
+  assert.equal((await call(adminVisiting, '/api/admin-visiting', withCookie(forged))).status, 401);
+  const tampered = cookie.slice(0, -2) + (cookie.endsWith('A') ? 'BB' : 'AA');
+  assert.equal((await call(adminVisiting, '/api/admin-visiting', withCookie(tampered))).status, 401);
+});
+
+await test('begona saytdan so‘rov (CSRF) — admin cookie bilan ham 403', async () => {
   assert.equal(sameOrigin(new Request(BASE, { headers: { origin: 'https://evil.example' } })), false);
   assert.equal(sameOrigin(new Request(BASE, { headers: { 'sec-fetch-site': 'cross-site' } })), false);
   assert.equal(sameOrigin(new Request(BASE, { headers: { origin: BASE } })), true);
   const res = await call(adminVisiting, '/api/admin-visiting', withCookie(cookie, post(goodDoctor, { origin: 'https://evil.example' })));
   assert.equal(res.status, 403);
+  const res2 = await call(adminMedia, '/api/admin-media', withCookie(cookie, { method: 'DELETE', headers: { 'sec-fetch-site': 'cross-site', 'content-type': 'application/json' }, body: '{"slot":"banner"}' }));
+  assert.equal(res2.status, 403);
 });
 
-await test('parol sozlanmagan bo‘lsa panel yopiq (503)', async () => {
-  process.env.ADMIN_PASSWORD = 'qisqa';
-  const res = await call(adminVisiting, '/api/admin-visiting', withCookie(cookie));
-  assert.equal(res.status, 503);
-  process.env.ADMIN_PASSWORD = 'juda-maxfiy-parol';
-});
-
-/** Bitta IP dan kirish urinishi. */
-const loginFrom = (addr, password) =>
-  adminAuth(
-    new Request(BASE + '/api/admin-auth', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-nf-client-connection-ip': addr },
-      body: JSON.stringify({ password }),
-    }),
-    ctx,
-  );
-
-await test('parolni taxmin qilish: 5 ta xatodan keyin IP bloklanadi, to‘g‘ri parol ham o‘tmaydi', async () => {
-  const statuses = [];
-  for (let i = 0; i < 5; i++) statuses.push((await loginFrom('192.168.9.9', 'xato')).status);
-  assert.deepEqual(statuses, [401, 401, 401, 401, 401]);
-  const blocked = await loginFrom('192.168.9.9', 'juda-maxfiy-parol');
-  assert.equal(blocked.status, 429);
-  assert.ok(Number(blocked.headers.get('retry-after')) > 0);
-  // Boshqa IP ga ta'sir qilmaydi.
-  assert.equal((await loginFrom('192.168.9.10', 'juda-maxfiy-parol')).status, 200);
-});
-
-await test('to‘g‘ri kirish limitni yemaydi va shu IP xatolarini tozalaydi', async () => {
-  for (let i = 0; i < 4; i++) assert.equal((await loginFrom('192.168.7.7', 'xato')).status, 401);
-  assert.equal((await loginFrom('192.168.7.7', 'juda-maxfiy-parol')).status, 200);
-  for (let i = 0; i < 4; i++) assert.equal((await loginFrom('192.168.7.7', 'xato')).status, 401);
-});
-
-await test('hamma IP dan soatiga 100 ta xato — kirish butunlay yopiladi', async () => {
-  const { GLOBAL_WINDOW_SECONDS, GLOBAL_MAX_FAILS } = await lib('login-guard.ts');
-  const start = Math.floor(Date.now() / 1000 / GLOBAL_WINDOW_SECONDS) * GLOBAL_WINDOW_SECONDS;
-  const key = `admin-fail#all#${start}`;
-  const before = tableOf('test_rate_limits').get(key);
-  seed('test_rate_limits', key, { bucket: key, hits: GLOBAL_MAX_FAILS, expires_at: start + GLOBAL_WINDOW_SECONDS });
-  assert.equal((await loginFrom('10.20.30.40', 'juda-maxfiy-parol')).status, 429);
-  // Ochiq sessiya ishlayveradi.
-  assert.equal((await call(adminVisiting, '/api/admin-visiting', withCookie(cookie))).status, 200);
-  if (before) seed('test_rate_limits', key, before);
-  else tableOf('test_rate_limits').delete(key);
-});
-
-await test('hisoblagich ishlamasa kirish rad etiladi (fail-closed)', async () => {
-  const { db } = await lib('db.ts');
-  const original = db.send;
-  db.send = async () => {
-    throw new Error('DynamoDB ishlamayapti');
-  };
-  try {
-    const res = await loginFrom('10.99.99.99', 'juda-maxfiy-parol');
-    assert.equal(res.status, 503);
-    assert.equal(res.headers.get('set-cookie'), null);
-  } finally {
-    db.send = original;
+await test('eski parol paneli yo‘q: /admin → 301 /kabinet/admin, admin-auth endpointi o‘chirilgan', () => {
+  const toml = readFileSync(join(root, 'netlify.toml'), 'utf8');
+  for (const from of ['/admin', '/admin/*']) {
+    const block = toml.split('[[redirects]]').find((b) => b.includes(`from = "${from}"`));
+    assert.ok(block, `${from} yo'naltirishi yo'q`);
+    assert.match(block, /to = "\/kabinet\/admin"/);
+    assert.match(block, /status = 301/);
   }
-});
-
-await test('parol 12 belgidan qisqa bo‘lsa panel yopiq', async () => {
-  process.env.ADMIN_PASSWORD = '11-belgi-pw';
-  assert.equal((await loginFrom('10.1.1.1', '11-belgi-pw')).status, 503);
-  process.env.ADMIN_PASSWORD = 'juda-maxfiy-parol';
+  assert.equal(existsSync(join(fnDir, 'admin-auth.ts')), false);
+  assert.equal(existsSync(join(root, 'src', 'pages', 'admin.astro')), false);
 });
 
 console.log('\nTashrif shifokorlari (admin):');
@@ -527,10 +480,13 @@ await test('kelgusi yozuvi bor shifokor o‘chirilishidan oldin ogohlantiriladi'
 
 console.log('\nBemor ma’lumoti: avtorizatsiyasiz kirish:');
 
-await test('har bir admin endpoint, har bir metod — cookie‘siz, soxta va eskirgan cookie bilan 401, telefon chiqmaydi', async () => {
-  const { createAdminCookie } = await lib('admin-auth.ts');
-  const expired = createAdminCookie(Date.now() - 13 * 3600_000).split(';')[0];
-  const forged = 'dimed_admin=' + Buffer.from(JSON.stringify({ exp: 9999999999, n: 'x' })).toString('base64url') + '.AAAA';
+await test('har bir admin endpoint, har bir metod — sessiyasiz, soxta, eskirgan (401) va bemor sessiyasi (403), telefon chiqmaydi', async () => {
+  // Eskirgan sessiya: imzo to'g'ri, lekin muddati o'tgan (30 kunlik cookie 31 kun oldin berilgan).
+  const RealNow = Date.now;
+  Date.now = () => RealNow() - 31 * 86400_000;
+  const expired = createSessionCookie({ phone: '+998900424242', userId: '424242' }).split(';')[0];
+  Date.now = RealNow;
+  const forged = 'dimed_session=' + Buffer.from(JSON.stringify({ phone: '+998900424242', userId: '424242', exp: 9999999999 })).toString('base64url') + '.AAAA';
   const endpoints = [
     [adminVisiting, '/api/admin-visiting', ['GET', 'POST', 'PATCH', 'DELETE']],
     [adminBookings, `/api/admin-visiting-bookings?from=${nextSaturday}&to=${nextSaturday}`, ['GET', 'POST']],
@@ -540,18 +496,18 @@ await test('har bir admin endpoint, har bir metod — cookie‘siz, soxta va esk
   let checked = 0;
   for (const [fn, path, methods] of endpoints) {
     for (const method of methods) {
-      for (const c of [null, forged, expired]) {
+      for (const c of [null, forged, expired, patientCookie]) {
         const init = { method, headers: { 'content-type': 'application/json', ...(c ? { cookie: c } : {}) } };
         if (method !== 'GET') init.body = JSON.stringify({ id: doctorId, status: 'cancelled', ...rows[0] });
         const res = await call(fn, path, init);
         const text = await res.text();
-        assert.equal(res.status, 401, `${method} ${path} (${c ? 'cookie' : 'cookie yo‘q'}) → ${res.status}`);
+        assert.equal(res.status, c === patientCookie ? 403 : 401, `${method} ${path} (${c ? 'cookie' : 'cookie yo‘q'}) → ${res.status}`);
         assert.ok(!/\+?998\d{9}|Aliyev/.test(text), `${method} ${path}: javobda bemor ma’lumoti`);
         checked++;
       }
     }
   }
-  assert.equal(checked, 30);
+  assert.equal(checked, 40);
   // Yozuvlar o'zgarmagan: hech biri bekor qilinmagan.
   const still = await (await call(adminBookings, `/api/admin-visiting-bookings?from=${nextSaturday}&to=${nextSaturday}`, withCookie(cookie))).json();
   assert.ok(still.bookings.every((b) => b.status !== 'cancelled' || b.time === rows[1].time));
@@ -561,7 +517,6 @@ await test('ommaviy javoblarda bemor ismi va telefoni yo‘q', async () => {
   const bodies = [
     await (await call(siteContent, '/api/site-content')).text(),
     await (await call(visitingSlots, `/api/visiting-slots?doctor=${doctorId}`)).text(),
-    await (await call(adminAuth, '/api/admin-auth')).text(),
   ];
   for (const text of bodies) {
     assert.ok(!/\+?998\d{9}|Aliyev|Yangi Bemor|Birinchi Odam|Ikkinchi Odam/.test(text), text.slice(0, 120));
