@@ -798,23 +798,140 @@ await test('API ishlamasa: bosh sahifada bo‘lim yo‘q, sahifada xato emas —
   await ctx.close();
 });
 
-await test('/admin: parolsiz panel ochilmaydi, noto‘g‘ri parol xabari', async () => {
-  const ctx = await browser.newContext({ viewport: { width: 375, height: 800 }, isMobile: true });
-  await ctx.route('**/api/admin-auth', (r) =>
-    r.request().method() === 'GET'
-      ? r.fulfill({ contentType: 'application/json', body: '{"ok":false,"configured":true}' })
-      : r.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"Parol noto‘g‘ri"}' }),
-  );
+console.log('\n/kabinet/admin: tashrif shifokorlari, yozuvlar, rasmlar:');
+
+const adminDoctor = {
+  id: 'v-aaaa1111', name: { uz: 'Karimov Jasur', ru: 'Каримов Жасур' }, specialty: { uz: 'Travmatolog', ru: 'Травматолог' },
+  bio: { uz: '' }, photoUrl: '', weekdays: [6], dates: [], skipDates: [], shifts: [{ start: '09:00', end: '14:00' }],
+  slotMinutes: 30, price: 150000, active: true, sort: 0,
+};
+
+/** Admin API: status — 200 (admin), 401 (kirmagan) yoki 403 (bemor). */
+async function mockAdmin(ctx, status = 200) {
+  const sent = [];
+  const deny = (r) =>
+    r.fulfill({
+      status,
+      contentType: 'application/json',
+      body: JSON.stringify(status === 403 ? { error: 'admin emas', telegramId: '777' } : { error: 'Avval kiring' }),
+    });
+  await ctx.route('**/api/admin-visiting-bookings**', (r) => {
+    if (status !== 200) return deny(r);
+    if (r.request().method() === 'POST') {
+      sent.push({ url: 'bookings', body: JSON.parse(r.request().postData() ?? '{}') });
+      return r.fulfill({ contentType: 'application/json', body: '{"ok":true}' });
+    }
+    return r.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        bookings: [{ doctorDay: 'v-aaaa1111#2030-01-05', time: '09:30', date: '2030-01-05', doctorId: 'v-aaaa1111', doctorName: 'Karimov Jasur — Travmatolog', name: 'Aliyev Vali', phone: '+998901234567', status: 'booked', price: 150000, createdAt: '2029-12-01T00:00:00Z' }],
+        doctors: [{ id: 'v-aaaa1111', name: 'Karimov Jasur — Travmatolog' }],
+      }),
+    });
+  });
+  await ctx.route('**/api/admin-visiting', (r) => {
+    if (status !== 200) return deny(r);
+    if (r.request().method() !== 'GET') {
+      const body = JSON.parse(r.request().postData() ?? '{}');
+      sent.push({ url: 'visiting', method: r.request().method(), body });
+      return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, doctor: { ...adminDoctor, ...body, id: body.id ?? 'v-bbbb2222' } }) });
+    }
+    return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ doctors: [adminDoctor] }) });
+  });
+  await ctx.route('**/api/admin-media**', (r) => {
+    if (status !== 200) return deny(r);
+    return r.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        slots: [
+          { id: 'banner', label: 'Banner', group: 'banner', hint: 'og', fallback: '/images/og-cover.jpg', active: true, current: null },
+          { id: 'gallery-building', label: 'Bino', group: 'gallery', hint: '', fallback: '/images/klinika-bino.webp', active: true, current: { url: '/images/klinika-xona.webp', width: 1200, height: 901, updatedAt: '2026-11-27T00:00:00Z' } },
+          { id: 'doctor-ashurov', label: 'Ashurov', group: 'doctor', hint: '', fallback: '/images/team/ashurov-tursunali.webp', active: true, current: null },
+        ],
+      }),
+    });
+  });
+  return sent;
+}
+
+for (const [path, signal] of [
+  ['/kabinet/admin/tashrif', '#list .row'],
+  ['/kabinet/admin/tashrif-yozuvlar', '#rows .row'],
+  ['/kabinet/admin/rasmlar', '.mcard'],
+]) {
+  await test(`${path}: kirmaganga kirish paneli, bemorga "huquq yo‘q" + Telegram ID`, async () => {
+    for (const status of [401, 403]) {
+      const ctx = await browser.newContext({ viewport: { width: 375, height: 800 }, isMobile: true });
+      await mockApi(ctx, { signedIn: status === 403 });
+      await mockAdmin(ctx, status);
+      const page = await ctx.newPage();
+      await page.goto(base + path, { waitUntil: 'networkidle' });
+      assert.equal(await page.isVisible('#denied'), true, `${status}: kirish paneli`);
+      assert.equal(await page.isVisible('#content'), false);
+      assert.equal(await page.locator(signal).count(), 0, 'ma’lumot chizilmasin');
+      if (status === 403) assert.match(await page.textContent('#denied'), /777/);
+      await ctx.close();
+    }
+  });
+}
+
+await test('admin: tashrif shifokorlari ro‘yxati, eski tablar joyida, yangi shifokor saqlanadi', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: true });
+  const sent = await mockAdmin(ctx);
   const page = await ctx.newPage();
-  await page.goto(`${base}/admin`, { waitUntil: 'networkidle' });
-  assert.equal(await page.isVisible('#loginView'), true);
-  assert.equal(await page.isVisible('#appView'), false);
-  await page.fill('#loginPass', 'xato');
-  await page.click('#loginBtn');
-  await page.waitForFunction(() => document.getElementById('loginMsg')?.textContent);
-  assert.match(await page.textContent('#loginMsg'), /noto‘g‘ri/);
-  const robots = await page.getAttribute('meta[name=robots]', 'content');
-  assert.match(robots, /noindex/);
+  const jsErrors = [];
+  page.on('pageerror', (e) => jsErrors.push(e.message));
+  await page.goto(`${base}/kabinet/admin/tashrif`, { waitUntil: 'networkidle' });
+  const tabs = await page.$$eval('[data-cabinet-tabs] a', (as) => as.map((a) => a.getAttribute('href')));
+  for (const href of ['/kabinet/admin/navbatlar', '/kabinet/admin', '/kabinet/admin/narxlar', '/kabinet/admin/referenslar', '/kabinet/admin/baholar', '/kabinet/admin/tashrif', '/kabinet/admin/tashrif-yozuvlar', '/kabinet/admin/rasmlar']) {
+    assert.ok(tabs.includes(href), `${href} tabi yo'q`);
+  }
+  assert.match(await page.textContent('#list'), /Karimov Jasur/);
+  await page.click('#addBtn');
+  assert.equal(await page.isVisible('#modal'), true);
+  await page.fill('[data-f="name.uz"]', 'Rahimova Dilnoza');
+  await page.fill('[data-f="specialty.uz"]', 'Endokrinolog');
+  await page.click('#f-langs [data-lang="ru"]');
+  await page.fill('[data-f="specialty.ru"]', 'Эндокринолог');
+  await page.check('#f-days input[value="0"]');
+  await page.click('#f-slot [data-min="20"]');
+  await page.fill('#f-price', '120000');
+  await page.click('#saveForm');
+  await page.waitForFunction(() => document.getElementById('modal')?.hidden);
+  const post = sent.find((x) => x.url === 'visiting' && x.method === 'POST');
+  assert.ok(post, 'POST ketmadi');
+  assert.equal(post.body.specialty.ru, 'Эндокринолог');
+  assert.deepEqual(post.body.weekdays, [0]);
+  assert.equal(post.body.slotMinutes, 20);
+  assert.equal(post.body.price, 120000);
+  assert.match(await page.textContent('#list'), /Rahimova Dilnoza/);
+  assert.deepEqual(jsErrors, []);
+  await ctx.close();
+});
+
+await test('admin: tashrif yozuvlari — telefon ko‘rinadi, holat o‘zgaradi; rasmlar sahifasi', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 800 }, isMobile: true });
+  await mockApi(ctx, { signedIn: true });
+  const sent = await mockAdmin(ctx);
+  const page = await ctx.newPage();
+  const jsErrors = [];
+  page.on('pageerror', (e) => jsErrors.push(e.message));
+  await page.goto(`${base}/kabinet/admin/tashrif-yozuvlar`, { waitUntil: 'networkidle' });
+  assert.match(await page.textContent('#rows'), /Aliyev Vali/);
+  assert.equal(await page.getAttribute('#rows a[href^="tel:"]', 'href'), 'tel:+998901234567');
+  await page.selectOption('#rows select', 'came');
+  await page.waitForFunction(() => document.querySelector('#rows .row')?.getAttribute('data-status') === 'came');
+  assert.equal(sent.find((x) => x.url === 'bookings')?.body.status, 'came');
+  let overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+  assert.ok(overflow <= 0, `yozuvlar: ${overflow}px yonga surilyapti`);
+
+  await page.goto(`${base}/kabinet/admin/rasmlar`, { waitUntil: 'networkidle' });
+  assert.equal(await page.locator('.mcard').count(), 3);
+  assert.match(await page.textContent('#groups'), /yangilangan/);
+  overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+  assert.ok(overflow <= 0, `rasmlar: ${overflow}px yonga surilyapti`);
+  assert.deepEqual(jsErrors, []);
   await ctx.close();
 });
 

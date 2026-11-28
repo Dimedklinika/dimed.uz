@@ -4,7 +4,7 @@
  * Repodagi rasmlar (`public/images/...`) — banner, galereya va
  * shifokorlar rasmlari — Netlify Blobs'ga yuklanadi (siqilib, WebP),
  * DynamoDB `site_media` jadvaliga esa havola yoziladi. Shundan keyin
- * har bir rasmni /admin → «Rasmlar» bo'limidan almashtirish mumkin.
+ * har bir rasmni /kabinet/admin/rasmlar dan almashtirish mumkin.
  *
  * Idempotent: `site_media` da yozuvi bor slot o'tkazib yuboriladi
  * (admin allaqachon almashtirgan rasm bosib ketilmaydi). `--force` —

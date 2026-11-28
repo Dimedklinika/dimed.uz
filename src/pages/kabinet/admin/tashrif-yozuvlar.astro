@@ -1,0 +1,60 @@
+---
+import Cabinet from '../../../layouts/Cabinet.astro';
+import SignInCard from '../../../components/SignInCard.astro';
+import { t } from '../../../data/i18n';
+import '../../../styles/admin-kabinet.css';
+
+/*
+  Admin — tashrif shifokorlariga saytdan yozilganlar: sana oralig'i va
+  shifokor bo'yicha, telefon to'liq (qabulxona qo'ng'iroq qiladi), holat:
+  kutilmoqda / keldi / kelmadi / bekor. Bekor qilingan vaqt saytda yana
+  bo'sh ko'rinadi.
+*/
+---
+
+<Cabinet
+  title="Tashrif yozuvlari — Admin"
+  description="Tashrif shifokorlariga saytdan yozilganlar va ularning holati."
+  eyebrow="Administrator"
+  heading="Tashrif shifokorlariga yozilganlar"
+  area="admin"
+  active="tashrif-yozuvlar"
+>
+  <div class="vadm">
+    <div id="loading" class="state">Yuklanmoqda…</div>
+
+    <SignInCard what={t('signin.what.admin')} whatKey="signin.what.admin" next="/kabinet/admin/tashrif-yozuvlar" id="denied" hidden />
+
+    <div id="content" hidden>
+      <div class="card glass">
+        <div class="card-head">
+          <h2>Yozilganlar</h2>
+          <div class="filters">
+            <button class="mini" type="button" data-range="today">Bugun</button>
+            <button class="mini" type="button" data-range="tomorrow">Ertaga</button>
+            <button class="mini" type="button" data-range="week">Kelgusi 7 kun</button>
+            <button class="mini" type="button" data-range="past">Oʻtgan 7 kun</button>
+          </div>
+        </div>
+        <div class="filters" style="margin-bottom:16px">
+          <input type="date" id="fromDay" aria-label="Boshlanish sanasi" />
+          <span class="dash">—</span>
+          <input type="date" id="toDay" aria-label="Tugash sanasi" />
+          <select id="docFilter" aria-label="Shifokor bo‘yicha saralash">
+            <option value="">Barcha shifokorlar</option>
+          </select>
+          <button class="mini" type="button" id="reload">Yangilash</button>
+        </div>
+        <div class="chips" id="stats"></div>
+        <p class="hint" style="margin-bottom:16px">Holatni qabul kuni belgilang. «Bekor qilingan» vaqt saytda yana boʻsh koʻrinadi.</p>
+        <p class="empty" id="empty" hidden>Bu oraliqda yozilganlar yoʻq.</p>
+        <div class="rows" id="rows"></div>
+      </div>
+    </div>
+  </div>
+</Cabinet>
+
+<script>
+  import { initVisitingBookingsAdmin } from '../../../lib/admin-visiting';
+  initVisitingBookingsAdmin();
+</script>
